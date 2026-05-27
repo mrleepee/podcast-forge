@@ -37,7 +37,10 @@ Liberland episodes spaced with 4 non-Liberland between each.
    - Type: Topic/research-based
    - Flags: default (~5 min)
 
-6. *(need 4 non-Liberland episodes before next — add to backlog as topics come up)*
+6. **The History of Taxation: From Ancient Tribute to Modern Certainty**
+   - Type: Topic/research-based
+   - Flags: `--long` (~10 min)
+   - Notes: Trace taxation from ancient Egypt/Rome through medieval tithes to modern income tax. Challenge the premise — is there a genuine legal basis, or was it war-driven expedience that became permanent? Cover: ancient grain tributes, Roman tax farmers, medieval tallage, the window tax, how WWI income tax became permanent, the "temporary" taxes that never expired. Señor Freedom skeptical angle — question whether consent was ever given.
 
 7. *(gap)*
 

@@ -1290,6 +1290,13 @@ def _narrate_as_podcast(summary_text, video_title="", extra_prompt="",
         )
     if extra_prompt:
         prompt += f"\nAdditional instructions for this episode:\n{extra_prompt}\n"
+
+    # Load SOUL.md for consistent persona across all episodes
+    soul_file = Path(__file__).parent / "SOUL.md"
+    if soul_file.exists():
+        soul_text = soul_file.read_text(encoding="utf-8")
+        prompt += f"\n--- PERSONA ---\n{soul_text}\n--- END PERSONA ---\n"
+
     prompt += (
         f"\n--- SUMMARY START ---\n{summary_text}\n--- SUMMARY END ---"
     )
