@@ -1,0 +1,11 @@
+yt-dlp>=2026.3.17
+kokoro>=0.3.0
+soundfile
+numpy
+torch
+transformers
+rich
+scikit-learn
+requests
+beautifulsoup4
+lxml

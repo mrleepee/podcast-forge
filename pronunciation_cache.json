@@ -1,0 +1,287 @@
+{
+  "ai": {
+    "ipa": "\u02cce\u026a\u02c8a\u026a",
+    "source": "manual",
+    "word": "AI"
+  },
+  "ansible": {
+    "ipa": "\u02c8\u00e6n.s\u026a.b\u0259l",
+    "source": "wiktionary",
+    "word": "Ansible"
+  },
+  "anthropic": {
+    "ipa": "\u00e6n\u02c8\u03b8r\u0252p\u026ak",
+    "source": "manual",
+    "word": "Anthropic"
+  },
+  "api": {
+    "ipa": "\u02cce\u026api\u02d0\u02c8a\u026a",
+    "source": "manual",
+    "word": "API"
+  },
+  "apis": {
+    "ipa": "\u02cce\u026api\u02d0\u02c8a\u026az",
+    "source": "manual",
+    "word": "APIs"
+  },
+  "btc": {
+    "ipa": "\u02ccbi\u02d0ti\u02d0\u02c8si\u02d0",
+    "source": "manual",
+    "word": "BTC"
+  },
+  "ceo": {
+    "ipa": "\u02ccsi\u02d0\u02cci\u02d0\u02c8o\u028a",
+    "source": "manual",
+    "word": "CEO"
+  },
+  "dao": {
+    "ipa": "da\u028a",
+    "source": "manual",
+    "word": "DAO"
+  },
+  "defi": {
+    "ipa": "di\u02d0\u02c8fa\u026a",
+    "source": "manual",
+    "word": "DeFi"
+  },
+  "devops": {
+    "ipa": "d\u025bv \u02c8\u0252ps",
+    "source": "manual",
+    "word": "DevOps"
+  },
+  "docker": {
+    "ipa": "\u02c8d\u0251k\u025a",
+    "source": "wiktionary",
+    "word": "Docker"
+  },
+  "elasticsearch": {
+    "ipa": "\u026a\u02ccl\u00e6st\u026ak\u02c8s\u025c\u02d0rt\u0283",
+    "source": "manual",
+    "word": "Elasticsearch"
+  },
+  "eth": {
+    "ipa": "\u02c8i\u02d0\u03b8\u0259\u0279i\u0259m",
+    "source": "manual",
+    "word": "ETH"
+  },
+  "fbi": {
+    "ipa": "\u02cc\u025bfbi\u02d0\u02c8a\u026a",
+    "source": "manual",
+    "word": "FBI"
+  },
+  "gpt": {
+    "ipa": "\u02ccd\u0292i\u02d0pi\u02d0\u02c8ti\u02d0",
+    "source": "manual",
+    "word": "GPT"
+  },
+  "graphql": {
+    "ipa": "\u0261\u0279\u00e6f kju \u02c8\u025bl",
+    "source": "manual",
+    "word": "GraphQL"
+  },
+  "homebrew": {
+    "ipa": "\u02c8ho\u028amb\u0279u",
+    "source": "manual",
+    "word": "Homebrew"
+  },
+  "http": {
+    "ipa": "\u02cce\u026at\u0283ti\u02d0ti\u02d0\u02c8pi\u02d0",
+    "source": "manual",
+    "word": "HTTP"
+  },
+  "huggingface": {
+    "ipa": "\u02c8h\u028c\u0261\u026a\u014bfe\u026as",
+    "source": "manual",
+    "word": "HuggingFace"
+  },
+  "ico": {
+    "ipa": "\u02cca\u026asi\u02d0\u02c8o\u028a",
+    "source": "manual",
+    "word": "ICO"
+  },
+  "ipv6": {
+    "ipa": "\u02cca\u026a\u02c8pi\u02d0v\u0259\u0279si\u0259n\u02c8s\u026aks",
+    "source": "manual",
+    "word": "IPv6"
+  },
+  "isa": {
+    "ipa": "\u02c8a\u026as\u0259",
+    "source": "manual",
+    "word": "ISA"
+  },
+  "isas": {
+    "ipa": "\u02c8a\u026as\u0259z",
+    "source": "manual",
+    "word": "ISAs"
+  },
+  "jpeg": {
+    "ipa": "\u02c8d\u0292e\u026ap\u025b\u0261",
+    "source": "manual",
+    "word": "JPEG"
+  },
+  "json": {
+    "ipa": "\u02c8d\u0292e\u026as\u0259n",
+    "source": "manual",
+    "word": "JSON"
+  },
+  "kafka": {
+    "ipa": "\u02c8k\u00e6fk\u0259",
+    "source": "manual",
+    "word": "Kafka"
+  },
+  "kokoro": {
+    "ipa": "\u02c8ko\u028ak\u0259\u02cc\u0279o\u028a",
+    "source": "wiktionary",
+    "word": "Kokoro"
+  },
+  "kotlin": {
+    "ipa": "\u02c8k\u0252tl\u026an",
+    "source": "manual",
+    "word": "Kotlin"
+  },
+  "kubernetes": {
+    "ipa": "\u02ccku\u02d0b\u0259r\u02c8n\u025bt\u026as",
+    "source": "manual",
+    "word": "Kubernetes"
+  },
+  "llm": {
+    "ipa": "\u02cc\u025bl\u025bl\u02c8\u025bm",
+    "source": "manual",
+    "word": "LLM"
+  },
+  "llms": {
+    "ipa": "\u02cc\u025bl\u025bl\u02c8\u025bmz",
+    "source": "manual",
+    "word": "LLMs"
+  },
+  "mcp": {
+    "ipa": "\u02cc\u025bmsi\u02d0\u02c8pi\u02d0",
+    "source": "manual",
+    "word": "MCP"
+  },
+  "mysql": {
+    "ipa": "ma\u026a \u02cc\u025bskju\u02d0\u02c8\u025bl",
+    "source": "manual",
+    "word": "MySQL"
+  },
+  "nasa": {
+    "ipa": "\u02c8n\u00e6s\u0259",
+    "source": "manual",
+    "word": "NASA"
+  },
+  "nato": {
+    "ipa": "\u02c8ne\u026ato\u028a",
+    "source": "manual",
+    "word": "NATO"
+  },
+  "nft": {
+    "ipa": "\u02cc\u025bf\u02c8ti\u02d0",
+    "source": "manual",
+    "word": "NFT"
+  },
+  "nginx": {
+    "ipa": "\u02c8\u025bnd\u0292\u026aks",
+    "source": "manual",
+    "word": "nginx"
+  },
+  "openai": {
+    "ipa": "\u02c8o\u028ap\u0259n\u02cce\u026a\u02c8a\u026a",
+    "source": "manual",
+    "word": "OpenAI"
+  },
+  "pdf": {
+    "ipa": "\u02ccpi\u02d0di\u02d0\u02c8\u025bf",
+    "source": "manual",
+    "word": "PDF"
+  },
+  "pdfs": {
+    "ipa": "\u02ccpi\u02d0di\u02d0\u02c8\u025bfs",
+    "source": "manual",
+    "word": "PDFs"
+  },
+  "postgresql": {
+    "ipa": "\u02c8po\u028ast\u0261\u0279\u025bs kju \u02c8\u025bl",
+    "source": "manual",
+    "word": "PostgreSQL"
+  },
+  "pytorch": {
+    "ipa": "pa\u026a t\u0254\u02d0rt\u0283",
+    "source": "manual",
+    "word": "PyTorch"
+  },
+  "redis": {
+    "ipa": "\u02c8r\u025bd\u026as",
+    "source": "manual",
+    "word": "Redis"
+  },
+  "sdk": {
+    "ipa": "\u02cc\u025bsdi\u02d0\u02c8ke\u026a",
+    "source": "manual",
+    "word": "SDK"
+  },
+  "spotify": {
+    "ipa": "\u02c8sp\u0252t\u026afa\u026a",
+    "source": "manual",
+    "word": "Spotify"
+  },
+  "sql": {
+    "ipa": "\u02c8si\u02d0kw\u0259l",
+    "source": "manual",
+    "word": "SQL"
+  },
+  "subqueue": {
+    "ipa": "s\u028cb\u02c8kju\u02d0",
+    "source": "manual",
+    "word": "SubQueue"
+  },
+  "tensorflow": {
+    "ipa": "\u02c8t\u025bns\u0259\u0279flo\u028a",
+    "source": "manual",
+    "word": "TensorFlow"
+  },
+  "transformer": {
+    "ipa": "t\u0279\u00e6ns\u02c8f\u0254\u02d0m\u0259",
+    "source": "wiktionary",
+    "word": "transformer"
+  },
+  "unesco": {
+    "ipa": "ju\u02c8n\u025bsko\u028a",
+    "source": "manual",
+    "word": "UNESCO"
+  },
+  "unicef": {
+    "ipa": "\u02c8ju\u02d0n\u026as\u025bf",
+    "source": "manual",
+    "word": "UNICEF"
+  },
+  "url": {
+    "ipa": "\u02ccju\u02d0\u02cc\u0251\u02d0r\u02c8\u025bl",
+    "source": "manual",
+    "word": "URL"
+  },
+  "urls": {
+    "ipa": "\u02ccju\u02d0\u02cc\u0251\u02d0r\u02c8\u025blz",
+    "source": "manual",
+    "word": "URLs"
+  },
+  "whisper": {
+    "ipa": "\u02c8(h)w\u026asp\u0259",
+    "source": "wiktionary",
+    "word": "Whisper"
+  },
+  "wireshark": {
+    "ipa": "\u02c8wa\u026a\u0259\u0279\u0283\u0251\u02d0rk",
+    "source": "manual",
+    "word": "Wireshark"
+  },
+  "xrp": {
+    "ipa": "\u02cc\u025bks\u02cc\u0251\u02d0r\u02c8pi\u02d0",
+    "source": "manual",
+    "word": "XRP"
+  },
+  "yaml": {
+    "ipa": "\u02c8j\u00e6m\u0259l",
+    "source": "manual",
+    "word": "YAML"
+  }
+}

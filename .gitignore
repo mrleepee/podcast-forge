@@ -1,0 +1,13 @@
+.env
+downloads/
+rss/
+*.wav
+*.mp3
+.venv/
+venv/
+episode_vectors.npz
+episode_vectorizer.pkl
+episode_vector_slugs.json
+__pycache__/
+*.pyc
+.tmp_*.json
