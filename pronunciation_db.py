@@ -210,8 +210,8 @@ def extract_candidate_words(text: str) -> list[str]:
     """
     candidates = set()
 
-    # ALL_CAPS tokens (2+ chars) — likely acronyms
-    for m in re.finditer(r'\b([A-Z]{2,}s?)\b', text):
+    # ALL_CAPS tokens (3+ chars) — likely acronyms; skip 2-letter codes (US, UK, EU)
+    for m in re.finditer(r'\b([A-Z]{3,}s?)\b', text):
         candidates.add(m.group(1))
 
     # CamelCase / PascalCase tokens
