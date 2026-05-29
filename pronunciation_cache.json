@@ -34,6 +34,11 @@
     "source": "manual",
     "word": "CEO"
   },
+  "css": {
+    "ipa": "si\u02d0 \u02c8\u025bs \u02c8\u025bs",
+    "source": "manual",
+    "word": "CSS"
+  },
   "dao": {
     "ipa": "da\u028a",
     "source": "manual",
@@ -84,6 +89,11 @@
     "source": "manual",
     "word": "Homebrew"
   },
+  "html": {
+    "ipa": "\u02c8e\u026at\u0283 t\u026a \u02c8\u025bm \u02c8\u025bl",
+    "source": "manual",
+    "word": "HTML"
+  },
   "http": {
     "ipa": "\u02cce\u026at\u0283ti\u02d0ti\u02d0\u02c8pi\u02d0",
     "source": "manual",
@@ -114,6 +124,11 @@
     "source": "manual",
     "word": "ISAs"
   },
+  "javascript": {
+    "ipa": "\u02c8d\u0292\u00e6v\u0259skr\u026apt",
+    "source": "manual",
+    "word": "JavaScript"
+  },
   "jpeg": {
     "ipa": "\u02c8d\u0292e\u026ap\u025b\u0261",
     "source": "manual",
@@ -143,6 +158,11 @@
     "ipa": "\u02ccku\u02d0b\u0259r\u02c8n\u025bt\u026as",
     "source": "manual",
     "word": "Kubernetes"
+  },
+  "linux": {
+    "ipa": "\u02c8l\u026an\u0259ks",
+    "source": "manual",
+    "word": "Linux"
   },
   "llm": {
     "ipa": "\u02cc\u025bl\u025bl\u02c8\u025bm",
@@ -184,6 +204,11 @@
     "source": "manual",
     "word": "nginx"
   },
+  "npm": {
+    "ipa": "\u025bn pi\u02d0 \u02c8\u025bm",
+    "source": "manual",
+    "word": "npm"
+  },
   "openai": {
     "ipa": "\u02c8o\u028ap\u0259n\u02cce\u026a\u02c8a\u026a",
     "source": "manual",
@@ -214,6 +239,11 @@
     "source": "manual",
     "word": "Redis"
   },
+  "rust": {
+    "ipa": "\u0279\u028cst",
+    "source": "wiktionary",
+    "word": "rust"
+  },
   "sdk": {
     "ipa": "\u02cc\u025bsdi\u02d0\u02c8ke\u026a",
     "source": "manual",
@@ -238,6 +268,11 @@
     "ipa": "\u02c8t\u025bns\u0259\u0279flo\u028a",
     "source": "manual",
     "word": "TensorFlow"
+  },
+  "tmux": {
+    "ipa": "\u02c8ti\u02d0m\u028cks",
+    "source": "manual",
+    "word": "tmux"
   },
   "transformer": {
     "ipa": "t\u0279\u00e6ns\u02c8f\u0254\u02d0m\u0259",

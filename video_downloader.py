@@ -1236,30 +1236,37 @@ def _narrate_as_podcast(summary_text, video_title="", extra_prompt="",
                 "- When mentioning filenames, file paths, or code references, write them as spoken "
                 "aloud: never write raw filenames like 'soul.md'. Instead write 'a markdown file "
                 "called soul'. Spell extensions if needed: 'dot em dee'.\n"
+                "- AVOID ACRONYMS. Write them out: 'United States' not 'US', 'United Kingdom' not "
+                "'UK', 'chief executive' not 'CEO', 'large language models' not 'LLMs', "
+                "'application programming interface' not 'API'. The exception is 'AI' — it has "
+                "become a normal noun in speech, so use 'AI' freely. But for everything else, "
+                "spell it out the way a human would say it in conversation.\n"
                 f"- Target {target_words} words total across both speakers "
                 f"(roughly {target_words // 150} minutes when read aloud).\n"
             )
     elif language == "es":
         prompt = (
-            f"Eres un presentador de podcast escribiendo un guion corto{title_ctx}. "
-            "Reescribe el siguiente resumen como una narración conversacional en español. "
-            "Reglas:\n"
-            "- Escribe en párrafos de texto plano, sin markdown, sin viñetas, sin títulos.\n"
-            "- Empieza con algo que atraiga al oyente — un dato sorprendente, una pregunta, "
-            "una declaración audaz o una breve introducción al tema. Sé natural y variado, "
-            "evita fórmulas rígidas como 'En este episodio vas a aprender X cosas.'\n"
-            "- Después de la apertura, pasa DIRECTAMENTE al tema. NO uses rellenos como "
-            "'Bueno', 'Vale', 'Hola', 'Entonces'. Comienza con un dato, pregunta o declaración.\n"
-            "- Este es un podcast para ESTUDIANTES PRINCIPIANTES de español. "
-            "Usa vocabulario simple, oraciones cortas, y tiempos verbales básicos "
-            "(presente, pasado simple). Evita subjuntivo complejo o jerga técnica.\n"
-            "- NO menciones un invitado, entrevista o compañero de conversación. "
-            "Es un podcast en solitario.\n"
-            "- Cubre los hechos e ideas clave del resumen de forma natural.\n"
-            "- Cierra con un cierre breve — una reflexión, un punto clave, o un pensamiento "
-            "hacia el futuro. Evita clichés como 'Hoy aprendimos...' cada vez.\n"
-            f"- Apunta a {target_words} palabras (aprox. {target_words // 150} minutos).\n"
-            "- Usa un tono cálido y conversacional.\n"
+            "You are a Spanish-learning podcast producer. Rewrite the following summary as a "
+            f"bilingual podcast episode{title_ctx} that teaches Spanish through immersion.\n\n"
+            "Format — every line must start with EN: or ES: followed by the spoken text:\n"
+            "EN: [sentence in English]\n"
+            "ES: [same sentence in beginner-friendly Spanish]\n"
+            "EN: [next English sentence]\n"
+            "ES: [same sentence in Spanish]\n\n"
+            "Rules:\n"
+            "- Each ES/EN pair covers one idea (1-2 sentences per line).\n"
+            "- ES lines use simple vocabulary, short sentences, basic tenses "
+            "(present, simple past). Avoid complex subjunctive or technical jargon.\n"
+            "- EN lines are the natural English equivalent — not word-for-word, but "
+            "conveying the same meaning the way a native speaker would say it.\n"
+            "- The flow should feel like a continuous podcast narration, not a vocabulary list. "
+            "Open with a hook, build through the content, close with a takeaway.\n"
+            "- Do NOT include any speaker labels, stage directions, or markdown. "
+            "Only ES: and EN: lines.\n"
+            "- After the opening hook, go DIRECTLY into the topic. No filler like "
+            "'Bienvenidos' or 'Let's begin.'\n"
+            f"- Target {target_words} words total across both languages "
+            f"(approx. {target_words // 150} minutes when read aloud).\n"
         )
     else:
         prompt = (
@@ -1287,6 +1294,11 @@ def _narrate_as_podcast(summary_text, video_title="", extra_prompt="",
             "'a markdown file called soul' or 'a config file'. If the extension matters, "
             "spell it: 'dot em dee', 'dot y a m l'. Same for folder paths — write "
             "'the source folder' not 'src/'.\n"
+            "- AVOID ACRONYMS. Write them out: 'United States' not 'US', 'United Kingdom' not "
+            "'UK', 'chief executive' not 'CEO', 'large language models' not 'LLMs', "
+            "'application programming interface' not 'API'. The exception is 'AI' — it has "
+            "become a normal noun in speech, so use 'AI' freely. But for everything else, "
+            "spell it out the way a human would say it in conversation.\n"
         )
     if extra_prompt:
         prompt += f"\nAdditional instructions for this episode:\n{extra_prompt}\n"
@@ -1366,11 +1378,56 @@ def _load_tts_prompt(language="en", duo=False):
     )
 
 
+def _polish_bilingual_tts(narrative_text):
+    """Bilingual text is already TTS-ready from the narration prompt. Skip polish to preserve EN:/ES: structure."""
+    # Clean up empty lines but preserve tag structure
+    lines = [l.strip() for l in narrative_text.strip().splitlines() if l.strip()]
+    return "\n".join(lines)
+
+
+def _polish_for_tts_raw(narrative_text, language="en"):
+    """Polish narration text for TTS without bilingual awareness."""
+    api_key = os.environ.get("MINIMAX_API_KEY")
+    if not api_key:
+        return narrative_text
+
+    prompt = _load_tts_prompt(language=language, duo=False)
+
+    payload = json.dumps({
+        "model": "MiniMax-M2.7",
+        "messages": [{"role": "user", "content": prompt + "\n" + narrative_text}],
+        "temperature": 0.1,
+    }).encode("utf-8")
+
+    for api_url in _MINIMAX_API_URLS:
+        req = urllib.request.Request(
+            api_url, data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+            choices = body.get("choices") or []
+            if choices:
+                return choices[0].get("message", {}).get("content", "").strip()
+        except (urllib.error.HTTPError, TimeoutError, OSError) as e:
+            print(f"TTS polish error ({type(e).__name__}): {e}")
+            continue
+    return narrative_text
+
+
 def _polish_for_tts(narrative_text, language="en", duo=False):
     """Polish narration text for natural TTS reading using comprehensive rules."""
     api_key = os.environ.get("MINIMAX_API_KEY")
     if not api_key:
         return narrative_text
+
+    # For bilingual EN:/ES: text, polish EN and ES lines separately
+    if narrative_text.lstrip().startswith("EN:") or "\nEN:" in narrative_text:
+        return _polish_bilingual_tts(narrative_text)
 
     prompt = _load_tts_prompt(language=language, duo=duo)
 
@@ -1437,6 +1494,12 @@ def _generate_duo_audio(narrative_text, output_mp3_path, lang="en"):
     if len(segments) < 3:
         print(f"  Duo: only {len(segments)} dialogue segments found — falling back to solo.")
         return _generate_podcast_audio(narrative_text, output_mp3_path, lang=lang)
+
+    # Fix pronunciation: enrich cache + collapse spaced acronyms
+    if lang == "en":
+        narrative_text = _prepare_pronunciation(narrative_text)
+        # Re-parse after pronunciation fixes
+        segments = _parse_dialogue(narrative_text)
 
     # Detect the two unique speakers (first-seen order)
     seen = []
@@ -1508,12 +1571,114 @@ def _generate_duo_audio(narrative_text, output_mp3_path, lang="en"):
     return True
 
 
+def _generate_bilingual_audio(narrative_text, output_mp3_path):
+    """Generate bilingual podcast audio: ES lines in Spanish voice, EN lines in English voice."""
+    from kokoro import KPipeline
+    import soundfile as sf
+    import numpy as np
+
+    SAMPLE_RATE = 24000
+
+    # Parse ES:/EN: lines
+    segments = []
+    for line in narrative_text.strip().splitlines():
+        line = line.strip()
+        if line.startswith("ES:"):
+            segments.append(("ES", line[3:].strip()))
+        elif line.startswith("EN:"):
+            segments.append(("EN", line[3:].strip()))
+
+    if not segments:
+        print("  No ES:/EN: lines found in bilingual text.")
+        return False
+
+    print(f"  Bilingual mode: {len(segments)} segments "
+          f"({sum(1 for l,_ in segments if l=='ES')} ES, {sum(1 for l,_ in segments if l=='EN')} EN)")
+
+    # Create two pipelines — one per language
+    pipeline_es = KPipeline(lang_code="e", repo_id="hexgrad/Kokoro-82M")
+    pipeline_en = KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M")
+
+    # Load pronunciation golds into both
+    try:
+        from pronunciation_db import load_golds_into_pipeline
+        n_es = load_golds_into_pipeline(pipeline_es)
+        n_en = load_golds_into_pipeline(pipeline_en)
+        if n_es or n_en:
+            print(f"  Loaded {n_en} pronunciation golds into bilingual pipelines")
+    except Exception as e:
+        print(f"  Warning: could not load pronunciation golds: {e}")
+
+    voice_es = "ef_dora"
+    voice_en = "bm_fable"
+    silence = np.zeros(int(0.15 * SAMPLE_RATE))
+
+    wav_path = str(Path(output_mp3_path).with_suffix(".wav"))
+    audio_parts = []
+
+    for lang_tag, text in segments:
+        if not text:
+            continue
+        pipeline = pipeline_es if lang_tag == "ES" else pipeline_en
+        voice = voice_es if lang_tag == "ES" else voice_en
+        kokoro_segments = list(pipeline(text, voice=voice))
+        if kokoro_segments:
+            chunk = np.concatenate([audio for gs, ps, audio in kokoro_segments])
+            audio_parts.append(chunk)
+            audio_parts.append(silence)
+
+    if not audio_parts:
+        print("  No audio generated for bilingual segments.")
+        return False
+
+    combined = np.concatenate(audio_parts)
+    duration = len(combined) / SAMPLE_RATE
+    sf.write(wav_path, combined, SAMPLE_RATE)
+
+    cmd = [
+        "ffmpeg", "-y", "-i", wav_path,
+        "-codec:a", "libmp3lame", "-qscale:a", "2",
+        "-af", "atempo=0.9",
+        str(output_mp3_path),
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    Path(wav_path).unlink(missing_ok=True)
+    if result.returncode != 0:
+        print(f"ffmpeg error: {result.stderr.strip()}")
+        return False
+
+    size_mb = Path(output_mp3_path).stat().st_size / (1024 * 1024)
+    print(f"  Bilingual MP3 saved: {output_mp3_path} ({size_mb:.1f}MB, {duration/60:.1f}min)")
+    return True
+
+
+def _prepare_pronunciation(text: str):
+    """Enrich pronunciation cache from text and return postprocessed text.
+
+    1. Auto-lookup uncached words via Wiktionary
+    2. Collapse spaced acronyms (e.g. "A I" → "AI") so Kokoro golds match
+    """
+    try:
+        from pronunciation_db import enrich_pronunciation_cache, pronunciation_postprocess
+        new = enrich_pronunciation_cache(text)
+        if new:
+            print(f"  Enriched {new} new Wiktionary pronunciations")
+        text = pronunciation_postprocess(text)
+    except Exception as e:
+        print(f"  Warning: pronunciation pass failed: {e}")
+    return text
+
+
 def _generate_podcast_audio(narrative_text, output_mp3_path, lang="en"):
     """Generate podcast audio using Kokoro TTS and convert to MP3."""
     from kokoro import KPipeline
     import soundfile as sf
     import numpy as np
     import random
+
+    # Fix pronunciation before TTS: auto-lookup + collapse spaced acronyms
+    if lang == "en":
+        narrative_text = _prepare_pronunciation(narrative_text)
 
     SAMPLE_RATE = 24000
     if lang == "es":
@@ -1898,8 +2063,13 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
 
         if es_txt.exists():
             es_narrative = es_txt.read_text(encoding="utf-8")
-            if not _gen_fn(es_narrative, es_mp3, lang="es"):
-                print("Spanish audio generation failed.")
+            # Detect bilingual ES:/EN: format and route to bilingual audio
+            if es_narrative.lstrip().startswith("EN:") or "\nEN:" in es_narrative:
+                if not _generate_bilingual_audio(es_narrative, es_mp3):
+                    print("Bilingual audio generation failed.")
+            else:
+                if not _gen_fn(es_narrative, es_mp3, lang="es"):
+                    print("Spanish audio generation failed.")
 
     # Update vector index with new episode
     desc_preview = summary_text[:500]
