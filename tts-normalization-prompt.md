@@ -43,58 +43,65 @@ Letter → phonetic syllable reference (use these ONLY when spaced letters fail)
 `O`→`oh`, `P`→`pee`, `Q`→`cue`, `R`→`ar`, `S`→`ess`, `T`→`tee`, `U`→`you`,
 `V`→`vee`, `W`→`double-you`, `X`→`ex`, `Y`→`why`, `Z`→`zee`.
 
-- `AI` → `A I`
-- `API` → `A P I`
-- `HTTP` → `H T T P`
-- `URL` → `U R L`
-- `CEO` → `C E O`
-- `LLM` → `L L M`
-- `PDF` → `P D F`
-- `FBI` → `F B I`
+- `AI` → `AI`
+- `API` → `API`
+- `HTTP` → `HTTP`
+- `URL` → `URL`
+- `CEO` → `CEO`
+- `LLM` → `LLM`
+- `PDF` → `PDF`
+- `FBI` → `FBI`
+- `MCP` → `MCP`
+- `GPT` → `GPT`
+- `SDK` → `SDK`
 
 Notes:
-- This project uses Kokoro TTS, which handles spaced letters correctly. Always use
-  spaced letters (e.g. `A I` not `eh! eye!`). Phonetic syllables are the fallback
-  ONLY for engines that blend spaced letters.
-- Always confirm the article before the acronym still sounds right: "an A I agent"
+- This project uses Kokoro TTS with a pronunciation golds database. Leave acronyms
+  and tech terms as single tokens (e.g. `AI` not `A I`) — the TTS pipeline has an
+  automatic post-processor that ensures correct pronunciation from a Wiktionary-backed
+  lexicon. Do NOT space the letters apart.
+- Always confirm the article before the acronym still sounds right: "an AI agent"
   is correct (vowel sound); a consonant-starting spelling may need "a" instead of "an".
 
 **Dot-acronyms** (letters separated by periods) follow the same rules — strip the dots
 and apply the phonetic syllable method:
 
-- `A.I.` → `A I`
-- `L.L.M.` → `L L M`
-- `M.C.P.` → `M C P`
-- `S.D.K.` → `S D K`
-- `U.S.` → `U S`
-- `A.D.` → `A D`
-- `I.D.` → `I D`
+- `A.I.` → `AI`
+- `L.L.M.` → `LLM`
+- `M.C.P.` → `MCP`
+- `S.D.K.` → `SDK`
+- `U.S.` → `US`
+- `A.D.` → `AD`
+- `I.D.` → `ID`
 
-Acronyms pronounced *as words* should be lowercased (or title-cased) so they are NOT
-spelled out at all.
+Acronyms pronounced *as words* should be left as-is (single token) so the
+pronunciation database handles them. Do NOT expand or spell them out.
 
-- `NASA` → `Nasa`
-- `NATO` → `Nato`
-- `UNESCO` → `Unesco` (pronounced "you-ness-co", three syllables)
-- `UNICEF` → `Unicef` (pronounced "you-niss-ef")
-- `JPEG` → `jay peg`
-- `SQL` → `sequel` (if your context says it that way) or `S Q L`
+- `JSON` → `JSON` (leave as-is, TTS has correct pronunciation)
+- `YAML` → `YAML`
+- `NASA` → `NASA`
+- `NATO` → `NATO`
+- `UNESCO` → `UNESCO`
+- `UNICEF` → `UNICEF`
+- `JPEG` → `JPEG`
+- `SQL` → `SQL`
+- `tmux` → `tmux` (pronounced "tee-mucks", leave as-is)
+- `Linux` → `Linux` (leave as-is)
 
-**Dense acronym clusters:** Use spaced letters consistently.
-`AI, ML, and NLP` → `A I, M L, and N L P`.
+**Dense acronym clusters:** Leave as single tokens.
+`AI, ML, and NLP` → `AI, ML, and NLP`.
 
 ### 2. Alphanumeric Codes, Versions & Product Names
 
 Split letters from digits and read digits as spoken groups. Identifier-style numbers
 are read digit-by-digit ("four oh two"); version-style numbers use "point".
 
-**Plural acronyms** — strip the trailing 's' and expand on first mention:
-- `ISAs` → `Individual Savings Accounts` (first mention), then `I S A s` (subsequent)
-- `APIs` → `A P I s`
-- `URLs` → `U R L s`
-- `PDFs` → `P D F s`
-- `LLMs` → `L L M s`
-- `MCPs` → `M C P s`
+**Plural acronyms** — leave as-is with trailing 's', TTS pipeline handles them:
+- `APIs` → `APIs`
+- `URLs` → `URLs`
+- `PDFs` → `PDFs`
+- `LLMs` → `LLMs`
+- `MCPs` → `MCPs`
 
 - `x402` → `X four oh two`
 - `GPT-4` → `G P T four`
@@ -312,7 +319,7 @@ Input:
 
 Output:
 
-> KARLOS: So X four oh two — the H T T P four oh two status code — lets
-> an A I agent pay three cents per query. He ran approximately fifteen queries
+> KARLOS: So X four oh two — the HTTP four oh two status code — lets
+> an AI agent pay three cents per query. He ran approximately fifteen queries
 > for a dollar fifty back on May eighteenth, twenty twenty-six, at nine fifty-six
-> A M. Huge deal.
+> AM. Huge deal.
