@@ -43,17 +43,18 @@ Letter → phonetic syllable reference (use these ONLY when spaced letters fail)
 `O`→`oh`, `P`→`pee`, `Q`→`cue`, `R`→`ar`, `S`→`ess`, `T`→`tee`, `U`→`you`,
 `V`→`vee`, `W`→`double-you`, `X`→`ex`, `Y`→`why`, `Z`→`zee`.
 
-- `AI` → `AI`
-- `API` → `API`
-- `HTTP` → `HTTP`
-- `URL` → `URL`
-- `CEO` → `CEO`
-- `LLM` → `LLM`
-- `PDF` → `PDF`
-- `FBI` → `FBI`
-- `MCP` → `MCP`
-- `GPT` → `GPT`
-- `SDK` → `SDK`
+- `AI` → `AI` (exception: keep as-is, it's a noun now)
+- `API` → `application programming interface` (or `a p i` if technical context)
+- `HTTP` → `H T T P`
+- `URL` → `U R L`
+- `CEO` → `chief executive`
+- `LLM` → `large language model`
+- `LLMs` → `large language models`
+- `PDF` → `P D F`
+- `FBI` → `F B I`
+- `MCP` → `M C P`
+- `GPT` → `G P T`
+- `SDK` → `S D K`
 
 Notes:
 - This project uses Kokoro TTS with a pronunciation golds database. Leave acronyms

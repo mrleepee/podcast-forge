@@ -1236,6 +1236,11 @@ def _narrate_as_podcast(summary_text, video_title="", extra_prompt="",
                 "- When mentioning filenames, file paths, or code references, write them as spoken "
                 "aloud: never write raw filenames like 'soul.md'. Instead write 'a markdown file "
                 "called soul'. Spell extensions if needed: 'dot em dee'.\n"
+                "- AVOID ACRONYMS. Write them out: 'United States' not 'US', 'United Kingdom' not "
+                "'UK', 'chief executive' not 'CEO', 'large language models' not 'LLMs', "
+                "'application programming interface' not 'API'. The exception is 'AI' — it has "
+                "become a normal noun in speech, so use 'AI' freely. But for everything else, "
+                "spell it out the way a human would say it in conversation.\n"
                 f"- Target {target_words} words total across both speakers "
                 f"(roughly {target_words // 150} minutes when read aloud).\n"
             )
@@ -1289,6 +1294,11 @@ def _narrate_as_podcast(summary_text, video_title="", extra_prompt="",
             "'a markdown file called soul' or 'a config file'. If the extension matters, "
             "spell it: 'dot em dee', 'dot y a m l'. Same for folder paths — write "
             "'the source folder' not 'src/'.\n"
+            "- AVOID ACRONYMS. Write them out: 'United States' not 'US', 'United Kingdom' not "
+            "'UK', 'chief executive' not 'CEO', 'large language models' not 'LLMs', "
+            "'application programming interface' not 'API'. The exception is 'AI' — it has "
+            "become a normal noun in speech, so use 'AI' freely. But for everything else, "
+            "spell it out the way a human would say it in conversation.\n"
         )
     if extra_prompt:
         prompt += f"\nAdditional instructions for this episode:\n{extra_prompt}\n"
