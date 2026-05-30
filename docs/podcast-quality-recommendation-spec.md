@@ -4,13 +4,13 @@ This spec recommends how to move `podcast-forge` from a useful automated video-t
 
 **Initiative:** Podcast quality upgrade
 **Status:** draft
-**Primary recommendation:** Treat the current pipeline as a fast draft generator. For release-quality episodes, add evidence-first content production, scripted editorial QA, free/local TTS profiles, deterministic voice settings, segment-level retries, and objective loudness/mastering checks before publish.
+**Primary recommendation:** Treat the current pipeline as a fast draft generator. For release-quality episodes, add evidence-first content production, scripted editorial QA, deterministic Kokoro voice settings, segment-level retries, and objective loudness/mastering checks before publish. The work is editorial quality and audio production; the TTS engine is a settled choice (Kokoro — local, free, real-time on the target Mac M2), not an open evaluation.
 
 ## Recommendation Summary
 
 - **Content:** Stop going directly from transcript summary to narration. Build every episode from a source pack, claim ledger, editorial outline, script draft, and critic pass.
 - **Voice:** Keep `SOUL.md` as the show bible, but convert it into scored acceptance checks: named sources, specific numbers/dates, clear thesis, no unverified claims, and no cliché openings/closings.
-- **TTS:** Do not use paid TTS. Keep Kokoro as the deterministic baseline, evaluate stronger free/local engines for final masters, and select the best local voice by blind A/B tests.
+- **TTS:** Kokoro is the production engine — local, free, Apache-2.0, and real-time on the target Mac M2. Lock its voices and settings and raise quality by improving Kokoro (segmentation, pronunciation gates, mastering), not by swapping in heavier engines. Piper is the only fallback. No paid TTS.
 - **Audio:** Generate segment WAVs first, retry weak segments, then master once to podcast loudness targets. Do not publish raw concatenated TTS output.
 - **Publishing:** Publish only when a quality report proves content checks, pronunciation checks, loudness checks, duration checks, and metadata checks passed.
 
@@ -127,7 +127,7 @@ This spec recommends how to move `podcast-forge` from a useful automated video-t
 - Human editorial judgment replacement.
 - Automated truth guarantee.
 
-### Phase 4 - Free Local TTS Profiles
+### Phase 4 - Deterministic Voice Profiles (Kokoro)
 
 **Status:** not started
 **Ticket:** none
@@ -135,7 +135,7 @@ This spec recommends how to move `podcast-forge` from a useful automated video-t
 
 #### Behaviour
 
-- Given a production episode, when final TTS is requested, then the system selects a configured free/local TTS profile rather than a random voice.
+- Given a production episode, when final TTS is requested, then the system uses the locked Kokoro voice profile for the show rather than a random voice.
 - Given a draft episode, when fast preview TTS is requested, then local Kokoro remains available.
 - Given a release episode, when local TTS is configured, then the output records engine, model path/version, voice, speed, style prompt/settings, sample rate, device, and generation timestamp.
 - Given a two-host episode, when TTS runs, then each character uses the same configured voice across all segments and future episodes unless deliberately changed.
@@ -262,36 +262,37 @@ This spec recommends how to move `podcast-forge` from a useful automated video-t
 - **Codec sanity:** Avoid repeated lossy transcodes. Generate lossless segment WAVs, assemble/master once, then encode the final publish file.
 - **Tempo:** Prefer engine-native speed/style controls. Avoid global `atempo` as a default because it can introduce artifacts and changes every word equally, including places where the script needs weight.
 
-## Free Local TTS Guidance
+## Local TTS Engine (Kokoro)
 
-Use an engine interface, not engine-specific code paths. The correct default should be decided by blind A/B tests using actual Señor Freedom scripts. Paid text-to-speech APIs are out of scope.
+The engine decision is settled: Kokoro is the production engine. It is already integrated, local, free, Apache-2.0, and real-time on the target Mac M2. Effort goes into making Kokoro sound better — deterministic voices, better segmentation, pronunciation gates, and mastering — not into shopping for a heavier model. Keep an engine interface (not engine-specific code paths) so a future swap stays cheap, but do not spend a phase evaluating engines now. Paid text-to-speech APIs are out of scope.
 
-### Recommended Engine Roles
+### Engine Roles
 
-- **Kokoro:** Keep as the default baseline because it is already integrated, local, fast, and permissively licensed. Improve it with deterministic voices, better segmentation, pronunciation gates, and mastering.
-- **VibeVoice:** Evaluate as the first higher-quality local candidate. The repo already has an experimental script, and Microsoft’s model card describes the realtime 0.5B variant as open-source, MIT-licensed, streaming-capable, and robust for long-form English speech.
-- **F5-TTS:** Evaluate as a second local candidate if voice consistency or reference-voice workflows become important. Its official repository describes it as flow-matching TTS with official code and local/Docker usage.
-- **System TTS / Piper-class fallback:** Keep only as emergency fallback or accessibility preview. Do not use for final masters unless it wins blind tests.
-- **Paid APIs:** OpenAI TTS, ElevenLabs, Cartesia, and similar services are excluded unless the no-paid-TTS constraint changes later.
+- **Kokoro (primary):** The production engine for all release audio. Lock voices and settings; raise quality through segmentation, pronunciation gates, and mastering.
+- **Piper (fallback only):** Fast, local, permissively licensed. Use only as emergency fallback or accessibility preview, never for final masters. Fallback output is marked `fallback_voice` and reviewed before publish.
+- **Excluded — heavyweight neural engines (F5-TTS, VibeVoice, XTTS, etc.):** Rejected for this pipeline. They run slower than real-time on a Mac M2 (F5-TTS ~RTF 3 on a base M2, with MPS ops falling back to CPU) and/or carry blocking license or output constraints (F5-TTS pretrained weights are non-commercial CC-BY-NC; VibeVoice bakes an audible disclaimer and a watermark into every file, and its TTS inference code was withdrawn upstream).
+- **Excluded — paid APIs:** OpenAI TTS, ElevenLabs, Cartesia, and similar are out of scope under the no-paid-TTS constraint.
 
-### Local Engine Selection Rubric
+### Engine Replacement Gates
 
-| Criterion | Weight | Pass condition |
-|---|---:|---|
-| Naturalness | 25% | Listener does not hear "AI narrator" artifacts in normal playback |
-| Authority/brand fit | 20% | Voice supports skeptical, direct Señor Freedom persona without sounding theatrical |
-| Prosody control | 15% | Hooks, numbers, contrasts, and implications are emphasized naturally |
-| Pronunciation reliability | 15% | Names, acronyms, finance terms, and jurisdictions need few manual fixes |
-| Segment consistency | 10% | Adjacent regenerated segments match timbre, pace, and energy |
-| Runtime practicality | 10% | Practical on local hardware for normal backlog throughput |
-| License/control constraints | 5% | Acceptable local use, redistribution, and attribution posture |
+Kokoro stays the default unless a candidate clears every gate below. These are pass/fail, not weighted — a strong-sounding voice that fails any single gate is rejected.
+
+| Gate | Requirement |
+|---|---|
+| Local & free | Runs fully offline with no per-character, per-minute, or subscription cost |
+| Speed | Sustains ≥ 1.0x real-time on the target Mac M2, with no GPU/CUDA dependency |
+| License | Permissive for the show's use including commercial; no non-commercial weights |
+| No forced markings | No mandatory audible disclaimer or watermark in the output |
+| Quality | Wins a blind A/B test against Kokoro on actual Señor Freedom scripts |
+
+Blind A/B judging listens for: naturalness (no "AI narrator" artifacts), fit with the skeptical, direct Señor Freedom persona, prosody on hooks/numbers/contrasts, pronunciation reliability on names and finance terms, and timbre/pace consistency across regenerated segments. If a future quality bump is worth exploring within these gates, the only lane is Apple-Silicon-native engines via MLX-Audio — never F5-TTS or VibeVoice.
 
 ## Constraints
 
 - Use one implementation branch per phase.
 - Keep each phase independently shippable and publish-safe.
 - No recurring per-character, per-minute, or subscription TTS spend.
-- Do not remove Kokoro; keep it as the baseline until a local/free engine beats it in blind tests.
+- Kokoro is the production engine. Do not replace it unless a candidate clears every Engine Replacement Gate: local, free, sustained ≥ real-time on the Mac M2, permissively licensed (commercial use, no non-commercial weights), watermark-free, and a blind-test winner against Kokoro.
 - Do not publish a changed engine, voice, model, prompt, or mastering profile without regression samples.
 - Preserve existing RSS generation and publishing behaviour until the release package can replace it safely.
 - Tests should start with pure functions and artifact validation before slow local TTS calls.
@@ -303,6 +304,7 @@ Use an engine interface, not engine-specific code paths. The correct default sho
 - **Full studio post-production:** Deferred because the immediate bottleneck is deterministic QA and TTS quality, not music beds or live mixing.
 - **Automatic truth guarantee:** Deferred because factual review still needs human editorial accountability.
 - **Paid TTS APIs:** Deferred because the operating constraint is no recurring TTS spend.
+- **Heavyweight neural TTS engines (F5-TTS, VibeVoice, XTTS-class):** Excluded because they run slower than real-time on a Mac M2 and/or carry blocking constraints — non-commercial weights (F5-TTS) or a forced audible disclaimer and watermark (VibeVoice).
 - **Voice cloning:** Deferred unless explicit consent, licensing, and retention rules are defined.
 
 ## Appendix: Codebase Review Notes
@@ -351,14 +353,16 @@ Each episode should have a folder or manifest with:
 3. Save transcript, summary, approved script, normalized script, and TTS settings in an episode package.
 4. Add a content QA rubric pass before TTS generation.
 5. Add a pronunciation manifest and audition clip step.
-6. Refactor TTS into local engine profiles: Kokoro baseline, VibeVoice candidate, F5-TTS candidate, emergency fallback.
+6. Refactor TTS behind a single engine interface with Kokoro as the production profile and Piper as the emergency fallback.
 7. Add segment-level synthesis and retry.
 8. Add multi-source research packs for backlog/topic episodes.
 
 ### A5. External References Checked
 
-- Kokoro model page: `https://huggingface.co/hexgrad/Kokoro-82M`
-- Microsoft VibeVoice repository/model docs: `https://github.com/microsoft/VibeVoice`, `https://huggingface.co/microsoft/VibeVoice-Realtime-0.5B`
-- F5-TTS official repository: `https://github.com/SWivid/F5-TTS`
+- Kokoro model page (production engine, Apache-2.0): `https://huggingface.co/hexgrad/Kokoro-82M`
+- Piper (fallback engine, fast/local): `https://github.com/rhasspy/piper`
+- MLX-Audio (Apple-Silicon engine lane for any future evaluation): `https://github.com/Blaizzy/mlx-audio`
+- Rejected — F5-TTS (pretrained weights non-commercial CC-BY-NC; ~RTF 3 on a base M2): `https://github.com/SWivid/F5-TTS`
+- Rejected — VibeVoice (forced audible disclaimer + watermark; TTS inference code withdrawn upstream): `https://github.com/microsoft/VibeVoice`
 - Apple Podcasts audio requirements: `https://podcasters.apple.com/support/893-audio-requirements`
 - Spotify loudness normalization reference: `https://support.spotify.com/artists/article/loudness-normalization/`
