@@ -235,7 +235,7 @@ class TestDialogueCheck:
         assert "echo" in result.reason.lower()
 
 
-
+class TestHarness:
     """The check harness discovers and runs checks."""
 
     def test_discover_finds_loudness(self):
@@ -255,6 +255,46 @@ class TestDialogueCheck:
         fixtures = load_fixtures("bad")
         names = [f["name"] for f in fixtures]
         assert "vague-filler" in names
+
+
+class TestQualityGate:
+    """quality_gate runs all checks and produces a report."""
+
+    def test_passes_on_good_content(self):
+        from checks.quality_gate import run_quality_gate
+        text = Path(REPO / "checks/fixtures/good/liberland-meritocracy.txt").read_text()
+        audio = REPO / "checks/fixtures/good/liberland-meritocracy.mp3"
+        report = run_quality_gate(text, audio)
+        assert report.passed
+        assert len(report.blocking_failures) == 0
+
+    def test_fails_on_bad_content(self):
+        from checks.quality_gate import run_quality_gate
+        text = Path(REPO / "checks/fixtures/bad/vague-filler.txt").read_text()
+        report = run_quality_gate(text, None)
+        assert not report.passed
+        assert len(report.blocking_failures) > 0
+
+    def test_writes_report_json(self):
+        import tempfile
+        from checks.quality_gate import run_quality_gate, write_quality_report
+        report = run_quality_gate("The API uses HTML.", None)
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
+            path = write_quality_report(report, tmp.name)
+        data = json.loads(Path(path).read_text())
+        assert "passed" in data
+        assert "checks" in data
+        assert "publish_blocked" in data
+        Path(path).unlink()
+
+    def test_report_has_all_checks(self):
+        from checks.quality_gate import run_quality_gate
+        report = run_quality_gate("Plain text about nothing.", None)
+        assert "loudness" in report.checks
+        assert "pronunciation" in report.checks
+        assert "substance" in report.checks
+        assert "structure" in report.checks
+        assert "dialogue" in report.checks
 
 
 if __name__ == "__main__":

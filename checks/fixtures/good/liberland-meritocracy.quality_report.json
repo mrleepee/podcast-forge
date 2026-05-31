@@ -1,0 +1,53 @@
+{
+  "passed": false,
+  "publish_blocked": true,
+  "checks": {
+    "loudness": {
+      "passed": false,
+      "reason": "no audio file found",
+      "metrics": {
+        "error": "missing_audio"
+      }
+    },
+    "pronunciation": {
+      "passed": true,
+      "reason": "no risky tokens found",
+      "metrics": {
+        "risky_count": 0
+      }
+    },
+    "substance": {
+      "passed": true,
+      "reason": "no filler, 6.8 numbers/1k, 0.0 sources/1k",
+      "metrics": {
+        "word_count": 292,
+        "filler_phrases": [],
+        "numbers": 2,
+        "numbers_per_1k": 6.8,
+        "named_sources": 0,
+        "sources_per_1k": 0.0
+      }
+    },
+    "structure": {
+      "passed": true,
+      "reason": "hook present, ending clean",
+      "metrics": {
+        "has_hook": true,
+        "opening": "In this episode you will learn two things: how Liberland's direct meritocracy\nactually works, and wh",
+        "ending_clean": true,
+        "ending_denied_phrases": []
+      }
+    },
+    "dialogue": {
+      "passed": true,
+      "reason": "solo episode (not applicable)",
+      "metrics": {
+        "duo": false
+      }
+    },
+    "qa_exhausted": true
+  },
+  "blocking_failures": [
+    "loudness: no audio file found"
+  ]
+}
