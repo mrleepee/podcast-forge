@@ -81,7 +81,61 @@ class TestMasterAudio:
         Path(tmp_path).unlink(missing_ok=True)
 
 
-class TestHarness:
+class TestPronunciationCheck:
+    """check_pronunciation detects and covers risky tokens."""
+
+    def test_detects_acronyms(self):
+        from checks.check_pronunciation import detect_risky_tokens
+        tokens = detect_risky_tokens("The API uses HTML and CSS for the GUI.")
+        assert "API" in tokens
+        assert "HTML" in tokens
+        assert "CSS" in tokens
+
+    def test_ignores_false_positives(self):
+        from checks.check_pronunciation import detect_risky_tokens
+        tokens = detect_risky_tokens("AI is the future of US and UK.")
+        assert "AI" not in tokens
+        assert "US" not in tokens
+        assert "UK" not in tokens
+
+    def test_detects_alphanumeric_codes(self):
+        from checks.check_pronunciation import detect_risky_tokens
+        tokens = detect_risky_tokens("Use x402 for HTTP 402 payments.")
+        assert "x402" in tokens or any("402" in t for t in tokens)
+
+    def test_passes_on_covered_script(self):
+        from checks.check_pronunciation import run as pron_run
+        fixture = {
+            "name": "test",
+            "script_text": "The API uses HTML and CSS.",
+            "audio_path": None,
+        }
+        result = pron_run(fixture)
+        assert result.passed
+
+    def test_fails_on_uncovered_tokens(self):
+        from checks.check_pronunciation import run as pron_run
+        fixture = {
+            "name": "test",
+            "script_text": "The ZYXW protocol uses QWERT for VBNM.",
+            "audio_path": None,
+        }
+        result = pron_run(fixture)
+        assert not result.passed
+        assert "uncovered" in result.reason.lower()
+
+    def test_passes_on_plain_english(self):
+        from checks.check_pronunciation import run as pron_run
+        fixture = {
+            "name": "test",
+            "script_text": "The cat sat on the mat and looked at the moon.",
+            "audio_path": None,
+        }
+        result = pron_run(fixture)
+        assert result.passed
+
+
+
     """The check harness discovers and runs checks."""
 
     def test_discover_finds_loudness(self):

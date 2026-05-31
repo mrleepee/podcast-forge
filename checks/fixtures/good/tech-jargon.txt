@@ -1,0 +1,10 @@
+In this episode you will learn why the x402 protocol could change online
+payments. Docker has become the standard for container deployment.
+The HTML specification was updated with new semantic elements.
+Developers use the API gateway pattern for microservices.
+GraphQL is a flexible query language on top of REST APIs.
+The FBI seized the DAO treasury stored in ETH tokens.
+DevOps teams use Ansible for infrastructure as code.
+CSS grid layout replaced the old float-based approach.
+GPT models power the new generation of AI tools.
+BTC reached new highs as DeFi lending grew.
