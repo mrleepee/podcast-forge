@@ -20,17 +20,25 @@ class TestPipelineStageError:
 
 
 class TestExtractEvidence:
-    """extract_evidence returns structured evidence entries."""
+    """extract_evidence raises on insufficient material, returns list from LLM."""
 
-    def test_returns_list(self):
+    def test_raises_on_short_text(self):
+        import pytest
         from pipeline_stages import extract_evidence
-        result = extract_evidence("A short text under 100 words limit.")
-        assert isinstance(result, list)
+        with pytest.raises(RuntimeError, match="Not enough source material"):
+            extract_evidence("Too short.")
 
-    def test_empty_for_short_text(self):
+    def test_raises_on_empty(self):
+        import pytest
         from pipeline_stages import extract_evidence
-        result = extract_evidence("Too short.")
-        assert result == []
+        with pytest.raises(RuntimeError, match="Not enough source material"):
+            extract_evidence("")
+
+    def test_raises_on_under_100_words(self):
+        import pytest
+        from pipeline_stages import extract_evidence
+        with pytest.raises(RuntimeError, match="received 7 words"):
+            extract_evidence("A short text under 100 words limit.")
 
     def test_deterministic_extracts_numbers(self):
         from pipeline_stages import _extract_evidence_deterministic

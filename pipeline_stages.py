@@ -9,26 +9,36 @@ Stage 3: draft_script() — narration script from outline + evidence
 from __future__ import annotations
 
 import json
+import os
 import re
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Shared MiniMax call (reuses existing infrastructure)
+# Shared MiniMax call — sends system+user prompts, uses same API as
+# _summarize_with_minimax but with the stage-specific system prompt
 # ---------------------------------------------------------------------------
 
-def _call_minimax(system_prompt: str, user_prompt: str, temperature: float = 0.3) -> str:
-    """Call MiniMax API with a system + user prompt. Returns raw text response."""
-    import urllib.request
-    import os
+_MINIMAX_API_URLS = [
+    "https://api.minimax.chat/v1/text/chatcompletion_v2",
+]
 
-    api_url = os.environ.get("MINIMAX_API_URL", "")
-    api_key = os.environ.get("MINIMAX_API_KEY", "")
-    if not api_url or not api_key:
-        # Fallback: use the existing _summarize_with_minimax infrastructure
-        raise RuntimeError("MiniMax API credentials not configured")
+
+def _call_minimax(system_prompt: str, user_prompt: str,
+                  temperature: float = 0.3) -> str:
+    """Call MiniMax API with a system + user prompt.
+
+    Uses the same model (MiniMax-M2.7) and URL rotation as the existing
+    _summarize_with_minimax, but sends a proper system message so the
+    stage-specific agent persona is applied.
+    """
+    api_key = os.environ.get("MINIMAX_API_KEY")
+    if not api_key:
+        raise RuntimeError("MINIMAX_API_KEY not set")
 
     payload = json.dumps({
-        "model": "MiniMax-Text-01",
+        "model": "MiniMax-M2.7",
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -36,45 +46,29 @@ def _call_minimax(system_prompt: str, user_prompt: str, temperature: float = 0.3
         "temperature": temperature,
     }).encode("utf-8")
 
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}",
-    }
+    last_error = None
+    for api_url in _MINIMAX_API_URLS:
+        req = urllib.request.Request(
+            api_url,
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=180) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+            choices = body.get("choices") or []
+            if choices:
+                return choices[0].get("message", {}).get("content", "").strip()
+            last_error = f"Unexpected MiniMax response: {body}"
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8", errors="replace")
+            last_error = f"MiniMax API error {e.code} ({api_url}): {err_body}"
+            continue
 
-    # Try to use existing session/cookie infrastructure
-    req = urllib.request.Request(api_url, data=payload, headers=headers, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=180) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            return data.get("choices", [{}])[0].get("message", {}).get("content", "")
-    except Exception as e:
-        raise RuntimeError(f"MiniMax API call failed: {e}")
-
-
-def _call_minimax_via_existing(system_prompt: str, user_prompt: str,
-                               temperature: float = 0.3) -> str:
-    """Call MiniMax using the existing video_downloader infrastructure."""
-    import subprocess
-    import sys
-
-    # Use the existing _summarize_with_minimax pattern but with custom prompts
-    combined = f"{system_prompt}\n\n---\n\n{user_prompt}"
-
-    script = f"""
-import sys
-sys.path.insert(0, '.')
-from video_downloader import _summarize_with_minimax
-# Reuse the existing MiniMax call infrastructure
-result = _summarize_with_minimax('''{user_prompt}''')
-print(result)
-"""
-    result = subprocess.run(
-        [sys.executable, "-c", script],
-        capture_output=True, text=True, timeout=180,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"MiniMax call failed: {result.stderr[-200:]}")
-    return result.stdout.strip()
+    raise RuntimeError(last_error or "All MiniMax API URLs failed")
 
 
 # ---------------------------------------------------------------------------
@@ -100,19 +94,18 @@ If unsure about any field, use low confidence and secondary reliability."""
 def extract_evidence(text: str) -> list[dict]:
     """Extract evidence entries from transcript or source text.
 
-    Returns a JSON array of evidence entries. Returns empty list for
-    insufficient source material.
+    Returns a JSON array of evidence entries. Raises RuntimeError for
+    insufficient source material or LLM failure.
     """
     if not text or len(text.split()) < 100:
-        return []
+        raise RuntimeError(
+            f"Not enough source material to extract evidence "
+            f"(received {len(text.split()) if text else 0} words, need ≥100)"
+        )
 
     prompt = f"Extract all evidence from the following text:\n\n{text[:8000]}"
 
-    try:
-        response = _call_minimax_via_existing(EXTRACTION_SYSTEM_PROMPT, prompt)
-    except Exception as e:
-        # If MiniMax fails, do basic extraction as fallback
-        return _extract_evidence_deterministic(text)
+    response = _call_minimax(EXTRACTION_SYSTEM_PROMPT, prompt)
 
     # Parse JSON from response
     try:
@@ -125,12 +118,14 @@ def extract_evidence(text: str) -> list[dict]:
     except json.JSONDecodeError:
         pass
 
-    # Fallback to deterministic extraction
-    return _extract_evidence_deterministic(text)
+    raise RuntimeError(
+        f"Evidence extraction LLM returned non-JSON response "
+        f"(first 200 chars: {response[:200]})"
+    )
 
 
 def _extract_evidence_deterministic(text: str) -> list[dict]:
-    """Basic deterministic evidence extraction when LLM is unavailable."""
+    """Deterministic evidence extraction for testing — NOT used in production pipeline."""
     entries = []
     sentences = re.split(r'(?<=[.!?])\s+', text)
 
@@ -178,7 +173,10 @@ if fewer than 5 evidence entries)"""
 
 
 def generate_outline(evidence: list[dict], soul_text: str) -> dict:
-    """Generate a thesis and outline from evidence + SOUL.md."""
+    """Generate a thesis and outline from evidence + SOUL.md.
+
+    Raises RuntimeError if the LLM fails or returns non-JSON.
+    """
     evidence_summary = json.dumps(evidence[:20], indent=2, ensure_ascii=False)
     soul_excerpt = soul_text[:2000] if soul_text else "(no SOUL.md provided)"
 
@@ -187,10 +185,7 @@ def generate_outline(evidence: list[dict], soul_text: str) -> dict:
         f"Show bible (SOUL.md):\n{soul_excerpt}"
     )
 
-    try:
-        response = _call_minimax_via_existing(OUTLINE_SYSTEM_PROMPT, prompt)
-    except Exception:
-        return _generate_outline_deterministic(evidence)
+    response = _call_minimax(OUTLINE_SYSTEM_PROMPT, prompt)
 
     try:
         match = re.search(r'\{.*\}', response, re.DOTALL)
@@ -201,11 +196,14 @@ def generate_outline(evidence: list[dict], soul_text: str) -> dict:
     except json.JSONDecodeError:
         pass
 
-    return _generate_outline_deterministic(evidence)
+    raise RuntimeError(
+        f"Outline generation LLM returned non-JSON or missing 'thesis' "
+        f"(first 200 chars: {response[:200]})"
+    )
 
 
 def _generate_outline_deterministic(evidence: list[dict]) -> dict:
-    """Basic deterministic outline when LLM is unavailable."""
+    """Deterministic outline for testing — NOT used in production pipeline."""
     warnings = []
     if len(evidence) < 5:
         warnings.append(f"thin evidence: only {len(evidence)} claims available")
@@ -248,7 +246,7 @@ def _build_opening_avoidance() -> str:
     for opening in recent:
         m = re.match(r"[a-zA-Z]+", opening)
         if m:
-            w = m.group(1).lower()
+            w = m.group(0).lower()
             word_counts[w] = word_counts.get(w, 0) + 1
 
     overused = [w for w, c in word_counts.items() if c >= 2]
