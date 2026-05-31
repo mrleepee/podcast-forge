@@ -1962,6 +1962,31 @@ def _next_episode_number(podcast_dir=None):
     return highest + 1
 
 
+def _run_quality_gate(episode_slug, script_path, audio_path, podcast_dir):
+    """Run quality checks and write quality_report.json. Warns on failure."""
+    try:
+        from checks.quality_gate import run_quality_gate, write_quality_report
+    except ImportError:
+        print("  Quality gate not available (checks/ not found). Skipping.")
+        return True
+
+    script_text = Path(script_path).read_text(encoding="utf-8") if Path(script_path).exists() else ""
+    report = run_quality_gate(script_text, audio_path)
+    report_path = Path(podcast_dir) / f"{episode_slug}.quality_report.json"
+    write_quality_report(report, report_path)
+
+    if report.passed:
+        print(f"  Quality gate PASSED — report: {report_path.name}")
+    else:
+        print(f"\n  ⚠️  Quality gate FAILED:")
+        for failure in report.blocking_failures:
+            print(f"    - {failure}")
+        print(f"  Report: {report_path}")
+        print("  (episode produced but review recommended before publish)\n")
+
+    return report.passed
+
+
 def produce_podcast(summary_path, video_title="", podcast_dir=None,
                     extra_prompt="", video_duration_seconds=0, duo=False):
     """Full podcast pipeline: summary → narrate → TTS → MP3 (English + Spanish)."""
@@ -2070,6 +2095,9 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
             else:
                 if not _gen_fn(es_narrative, es_mp3, lang="es"):
                     print("Spanish audio generation failed.")
+
+    # --- Quality gate ---
+    _run_quality_gate(clean_name, en_txt, en_mp3, podcast_path)
 
     # Update vector index with new episode
     desc_preview = summary_text[:500]
