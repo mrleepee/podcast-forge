@@ -2047,6 +2047,19 @@ def _run_evidence_pipeline(summary_text, clean_name, podcast_path,
                           video_title, extra_prompt, target_words, duo,
                           max_revisions=3)
 
+    # Stage 4b: Opening sentence freshness check
+    try:
+        from checks.check_opening import run as check_opening, update_opening_log
+        log_path = Path(__file__).parent / "checks" / "opening_log.json"
+        opening_result = check_opening({"script_text": en_narrative}, log_path)
+        if opening_result.passed:
+            print(f"    Opening check: {opening_result.reason}")
+        else:
+            print(f"    ⚠️ Opening check: {opening_result.reason}")
+            print(f"      (episode produced — consider revising the opening)")
+    except ImportError:
+        print("    Opening check not available, skipping.")
+
     # Stage 5: Audio generation
     print("  Stage 5: Audio generation...")
     if not en_mp3.exists():
@@ -2056,6 +2069,17 @@ def _run_evidence_pipeline(summary_text, clean_name, podcast_path,
                 "Kokoro synthesis failed", str(en_txt))
 
     print(f"  Evidence-first pipeline complete: {en_mp3.name}")
+
+    # Update opening log with this episode's first sentence
+    try:
+        from checks.check_opening import _extract_first_sentence, update_opening_log
+        log_path = Path(__file__).parent / "checks" / "opening_log.json"
+        opening = _extract_first_sentence(en_narrative)
+        if opening:
+            update_opening_log(log_path, clean_name, opening)
+    except Exception:
+        pass  # non-critical
+
     return en_txt, en_mp3
 
 

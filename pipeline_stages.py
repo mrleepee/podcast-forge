@@ -226,6 +226,45 @@ def _generate_outline_deterministic(evidence: list[dict]) -> dict:
 # Stage 3: Script drafting
 # ---------------------------------------------------------------------------
 
+
+def _build_opening_avoidance() -> str:
+    """Build an instruction telling the narrator which opening words to avoid."""
+    log_path = Path(__file__).parent / "checks" / "opening_log.json"
+    if not log_path.exists():
+        return ""
+
+    try:
+        from checks.check_opening import _load_opening_log, _get_recent_openings
+        log = _load_opening_log(log_path)
+        recent = _get_recent_openings(log, n=10)
+    except Exception:
+        return ""
+
+    if not recent:
+        return ""
+
+    # Count first words
+    word_counts: dict[str, int] = {}
+    for opening in recent:
+        m = re.match(r"[a-zA-Z]+", opening)
+        if m:
+            w = m.group(1).lower()
+            word_counts[w] = word_counts.get(w, 0) + 1
+
+    overused = [w for w, c in word_counts.items() if c >= 2]
+    if not overused:
+        return ""
+
+    words_str = ", ".join(f'"{w.capitalize()}..."' for w in overused)
+    examples = "; ".join(f'"{r[:60]}"' for r in recent[:3])
+    return (
+        f"IMPORTANT: Do NOT start the script with {words_str}. "
+        f"These openings have been used recently: {examples}. "
+        f"Choose a fresh opening — a specific number, a name, a bold claim, "
+        f"or a question the listener hasn't heard before."
+    )
+
+
 def draft_script(outline: dict, evidence: list[dict], soul_text: str,
                  video_title: str = "", extra_prompt: str = "",
                  target_words: int = 700, duo: bool = False) -> str:
@@ -242,6 +281,9 @@ def draft_script(outline: dict, evidence: list[dict], soul_text: str,
         for i, e in enumerate(evidence[:20])
     )
 
+    # Build opening-freshness instruction from the log
+    opening_instruction = _build_opening_avoidance()
+
     structured_input = (
         f"THESIS: {outline.get('thesis', '')}\n"
         f"HOOK: {outline.get('hook', '')}\n"
@@ -252,7 +294,8 @@ def draft_script(outline: dict, evidence: list[dict], soul_text: str,
         f"CLOSE: {outline.get('close', '')}\n\n"
         f"EVIDENCE:\n{evidence_claims}\n\n"
         f"Write the narration following this outline. Every factual claim must be "
-        f"traceable to the evidence above. Do not introduce facts not in the evidence."
+        f"traceable to the evidence above. Do not introduce facts not in the evidence.\n\n"
+        f"{opening_instruction}"
     )
 
     # Use existing narration infrastructure with the structured input
