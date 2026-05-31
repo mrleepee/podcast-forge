@@ -6,7 +6,7 @@ produces a checkable artifact, and the script is written from evidence — not f
 a compressed summary.
 
 **Initiative:** Podcast quality upgrade — pipeline refactor
-**Status:** implemented
+**Status:** review fixes applied — critical findings #1 #2 #3 #5 resolved, pending end-to-end validation
 **Branch:** `feature/evidence-first-pipeline`
 
 ## Requirements
