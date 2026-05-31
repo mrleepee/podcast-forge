@@ -1,0 +1,5 @@
+Host: In this episode you will learn why Liberland's CBDC alternative could change how we think about money. By 2024, ninety countries were piloting central bank digital currencies.
+Co-host: That is a staggering number. But the key question is whether any of those pilots actually protect privacy, or whether CBDC is just surveillance with a payment rail.
+Host: Exactly. Liberland's approach uses the x402 protocol instead. Settlement in seconds, no permission required, and no central authority watching the transaction.
+Co-host: So the trade-off is clear. You get speed and privacy, but you lose the consumer protections that come with regulated banking. If someone steals your keys, there is no fraud department to call.
+Host: That is the implication listeners should sit with. The technology works. The governance question — who backs it, who insures it, who resolves disputes — is still open.
