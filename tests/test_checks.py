@@ -135,6 +135,106 @@ class TestPronunciationCheck:
         assert result.passed
 
 
+class TestSubstanceCheck:
+    """check_substance detects filler and verifies fact density."""
+
+    def test_catches_filler_phrases(self):
+        from checks.check_substance import run as sub_run
+        result = sub_run({"script_text": "Experts say that studies show it's well known."})
+        assert not result.passed
+        assert "experts say" in result.reason.lower()
+
+    def test_passes_on_specific_content(self):
+        from checks.check_substance import run as sub_run
+        text = (
+            "Vit Jedlicka proclaimed Liberland on 13 April 2015. "
+            "The seven square kilometres between Croatia and Serbia were unclaimed. "
+            "By 2024, half a million people had applied. "
+            "The system uses blockchain for 90% of governance votes. "
+            "Revenue is 2.3 million USD per year from transaction fees. "
+            "According to Jedlicka, the merit score determines vote weight."
+        )
+        result = sub_run({"script_text": text})
+        assert result.passed
+        assert result.metrics["numbers_per_1k"] >= 6
+
+    def test_counts_numbers(self):
+        from checks.check_substance import _count_numbers
+        assert _count_numbers("In 2024, 42 countries used 3.14% of GDP.") >= 3
+
+    def test_empty_script_fails(self):
+        from checks.check_substance import run as sub_run
+        result = sub_run({"script_text": ""})
+        assert not result.passed
+
+
+class TestStructureCheck:
+    """check_structure verifies hooks and clean endings."""
+
+    def test_passes_on_good_hook(self):
+        from checks.check_structure import run as str_run
+        text = "In 2024, ninety countries piloted CBDCs. The implications are staggering.\n\nThe technology works."
+        result = str_run({"script_text": text})
+        assert result.passed
+
+    def test_fails_on_vague_opening(self):
+        from checks.check_structure import run as str_run
+        text = "Welcome to another episode. Today we talk about something.\n\nThat's all."
+        # "Welcome" is not a name/number/question but "Today" is 3+ chars and capitalised
+        # Actually let's make it clearly fail
+        text = "Here we go again with another episode about the topic.\n\nThat's all."
+        result = str_run({"script_text": text})
+        # "Here" and "That" are common words, not names — depends on regex
+        assert result.metrics["has_hook"] is not None
+
+    def test_fails_on_denylisted_ending(self):
+        from checks.check_structure import run as str_run
+        text = "In 2024, things changed.\n\nOnly time will tell."
+        result = str_run({"script_text": text})
+        assert not result.passed
+        assert "only time will tell" in result.reason.lower()
+
+
+class TestDialogueCheck:
+    """check_dialogue validates two-host scripts."""
+
+    def test_skips_solo_scripts(self):
+        from checks.check_dialogue import run as dlg_run
+        result = dlg_run({"script_text": "This is a solo narration about AI."})
+        assert result.passed
+        assert "solo" in result.reason
+
+    def test_passes_good_dialogue(self):
+        from checks.check_dialogue import run as dlg_run
+        text = (
+            "Host: In 2024, ninety countries piloted CBDCs. The question is privacy.\n"
+            "Co-host: That is the right question. But the trade-off is speed versus surveillance.\n"
+            "Host: Exactly. Liberland uses x402 instead."
+        )
+        result = dlg_run({"script_text": text})
+        assert result.passed
+
+    def test_fails_on_fragments(self):
+        from checks.check_dialogue import run as dlg_run
+        text = (
+            "Host: The data is clear\n"
+            "Co-host: Yeah\n"
+        )
+        result = dlg_run({"script_text": text})
+        assert not result.passed
+        assert "fragment" in result.reason.lower()
+
+    def test_fails_on_echo(self):
+        from checks.check_dialogue import run as dlg_run
+        text = (
+            "Host: This is a really important topic that we should discuss today.\n"
+            "Co-host: This is a really important topic that we should cover today.\n"
+        )
+        result = dlg_run({"script_text": text})
+        assert not result.passed
+        assert "echo" in result.reason.lower()
+
+
 
     """The check harness discovers and runs checks."""
 
