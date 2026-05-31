@@ -4,6 +4,7 @@
 - ep90 — Liberland's Direct Meritocracy: How Vit Jedlicka Designed a New Nation
 - ep93 — Setting Up Shop in the Caucasus: Georgia Corporate Structures for Nomads
 - ep99 — Your AI Agent Dies the Second You Close the Terminal
+- ep105 — Robinhood Is Now Open to Agents
 
 ## Pending Episodes (in production order)
 
@@ -68,13 +69,7 @@ Liberland episodes spaced with 4 non-Liberland between each.
 
 11. *(need 4 non-Liberland episodes before next)*
 
-12. **Robinhood Is Now Open to Agents**
-    - Source: https://robinhood.com/us/en/newsroom/robinhood-is-now-open-to-agents/
-    - Type: Topic/research-based
-    - Flags: default (~5 min)
-    - Notes: Robinhood opens API access to AI agents for trading — implications for autonomous finance, agentic payments, and the intersection of AI and financial markets
-
-13. *(gap)*
+12. *(gap)*
 
 14. *(gap)*
 

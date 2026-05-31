@@ -1962,9 +1962,153 @@ def _next_episode_number(podcast_dir=None):
     return highest + 1
 
 
+# ---------------------------------------------------------------------------
+# Evidence-first pipeline
+# ---------------------------------------------------------------------------
+
+class PipelineStageError(Exception):
+    """Raised when an evidence-first pipeline stage fails."""
+    def __init__(self, stage, message, artifact_path=None):
+        self.stage = stage
+        self.artifact_path = artifact_path
+        super().__init__(f"{stage}: {message}")
+
+
+def _run_evidence_pipeline(summary_text, clean_name, podcast_path,
+                           video_title="", extra_prompt="", target_words=700, duo=False):
+    """Run the evidence-first pipeline: evidence → outline → script → QA → audio.
+
+    Returns (en_txt_path, en_mp3_path) on success.
+    Raises PipelineStageError on stage failure.
+    """
+    import json as _json
+
+    artifacts_dir = podcast_path / clean_name
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    # Stage 1: Evidence extraction
+    print("  Stage 1: Extracting evidence...")
+    evidence_path = artifacts_dir / "evidence_map.json"
+    if evidence_path.exists():
+        print(f"    Evidence map exists: {evidence_path.name}")
+        evidence = _json.loads(evidence_path.read_text(encoding="utf-8"))
+    else:
+        from pipeline_stages import extract_evidence
+        evidence = extract_evidence(summary_text)
+        evidence_path.write_text(_json.dumps(evidence, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"    Extracted {len(evidence)} evidence entries → {evidence_path.name}")
+
+    if not evidence:
+        raise PipelineStageError("evidence_extraction",
+            "no evidence extracted from source material", str(evidence_path))
+
+    # Stage 2: Outline generation
+    print("  Stage 2: Generating outline...")
+    outline_path = artifacts_dir / "outline.json"
+    if outline_path.exists():
+        print(f"    Outline exists: {outline_path.name}")
+        outline = _json.loads(outline_path.read_text(encoding="utf-8"))
+    else:
+        from pipeline_stages import generate_outline
+        soul_path = Path(__file__).parent / "SOUL.md"
+        soul_text = soul_path.read_text(encoding="utf-8") if soul_path.exists() else ""
+        outline = generate_outline(evidence, soul_text)
+        outline_path.write_text(_json.dumps(outline, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"    Outline generated → {outline_path.name}")
+
+    # Stage 3: Script drafting
+    print("  Stage 3: Drafting script...")
+    en_txt = podcast_path / f"{clean_name}.podcast.txt"
+    en_mp3 = podcast_path / f"{clean_name}.podcast.mp3"
+
+    if en_txt.exists():
+        print(f"    Script exists: {en_txt.name}")
+        en_narrative = en_txt.read_text(encoding="utf-8")
+    else:
+        from pipeline_stages import draft_script
+        soul_path = Path(__file__).parent / "SOUL.md"
+        soul_text = soul_path.read_text(encoding="utf-8") if soul_path.exists() else ""
+        en_narrative = draft_script(
+            outline, evidence, soul_text,
+            video_title=video_title, extra_prompt=extra_prompt,
+            target_words=target_words, duo=duo,
+        )
+        if not en_narrative:
+            raise PipelineStageError("script_draft",
+                "script generation returned empty", str(outline_path))
+        en_narrative = _polish_for_tts(en_narrative, language="en", duo=duo)
+        en_txt.write_text(en_narrative, encoding="utf-8")
+        print(f"    Script saved: {en_txt.name}")
+
+    # Stage 4: Content QA (with revision loop)
+    print("  Stage 4: Content QA...")
+    _run_qa_revision_loop(en_narrative, en_txt, outline, evidence,
+                          soul_text if 'soul_text' in dir() else "",
+                          video_title, extra_prompt, target_words, duo,
+                          max_revisions=3)
+
+    # Stage 5: Audio generation
+    print("  Stage 5: Audio generation...")
+    if not en_mp3.exists():
+        _gen_fn = _generate_duo_audio if duo else _generate_podcast_audio
+        if not _gen_fn(en_narrative, en_mp3, lang="en"):
+            raise PipelineStageError("audio_generation",
+                "Kokoro synthesis failed", str(en_txt))
+
+    print(f"  Evidence-first pipeline complete: {en_mp3.name}")
+    return en_txt, en_mp3
+
+
+def _run_qa_revision_loop(script_text, script_path, outline, evidence,
+                          soul_text, video_title, extra_prompt, target_words, duo,
+                          max_revisions=3):
+    """Run content QA and revise script up to max_revisions times."""
+    try:
+        from checks.quality_gate import run_quality_gate
+    except ImportError:
+        print("    Quality gate not available, skipping QA loop.")
+        return
+
+    for attempt in range(max_revisions):
+        report = run_quality_gate(script_text)
+        if report.passed:
+            print(f"    QA passed on attempt {attempt + 1}")
+            return
+        print(f"    QA failed (attempt {attempt + 1}/{max_revisions}):")
+        for f in report.blocking_failures[:3]:
+            print(f"      - {f}")
+
+        if attempt < max_revisions - 1:
+            print("    Revising script...")
+            from pipeline_stages import draft_script
+            qa_feedback = "Previous draft failed QA: " + "; ".join(report.blocking_failures)
+            revised = draft_script(
+                outline, evidence, soul_text,
+                video_title=video_title,
+                extra_prompt=f"{extra_prompt}\n{qa_feedback}" if extra_prompt else qa_feedback,
+                target_words=target_words, duo=duo,
+            )
+            if revised:
+                revised = _polish_for_tts(revised, language="en", duo=duo)
+                script_path.write_text(revised, encoding="utf-8")
+                script_text = revised
+                print(f"    Revised script saved")
+
+    print(f"    QA exhausted after {max_revisions} revisions, proceeding with best draft")
+    qa_report_path = script_path.parent / f"{script_path.stem}.quality_report.json"
+    import json
+    from checks.quality_gate import write_quality_report
+    report.checks["qa_exhausted"] = True
+    write_quality_report(report, qa_report_path)
+
+
 def produce_podcast(summary_path, video_title="", podcast_dir=None,
-                    extra_prompt="", video_duration_seconds=0, duo=False):
-    """Full podcast pipeline: summary → narrate → TTS → MP3 (English + Spanish)."""
+                    extra_prompt="", video_duration_seconds=0, duo=False,
+                    pipeline="summary"):
+    """Full podcast pipeline: summary → narrate → TTS → MP3 (English + Spanish).
+
+    pipeline: "summary" (default) or "evidence" for the evidence-first path.
+    """
     if podcast_dir is None:
         podcast_dir = _AUDIO_DIR
     summary_path = Path(summary_path)
@@ -2015,30 +2159,44 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
     else:
         print("  Similarity check passed.")
 
-    # --- English ---
-    en_txt = podcast_path / f"{clean_name}.podcast.txt"
-    en_mp3 = podcast_path / f"{clean_name}.podcast.mp3"
-
-    if en_mp3.exists():
-        print(f"English podcast already exists: {en_mp3}")
-    else:
-        if en_txt.exists():
-            print(f"English narration exists, skipping MiniMax")
-            en_narrative = en_txt.read_text(encoding="utf-8")
-        else:
-            en_narrative = _narrate_as_podcast(
-                summary_text, video_title=video_title,
-                extra_prompt=extra_prompt, target_words=target_words, language="en", duo=duo)
-            if not en_narrative:
-                print("Failed to generate English narration.")
-                return None
-            en_narrative = _polish_for_tts(en_narrative, language="en", duo=duo)
-            en_txt.write_text(en_narrative, encoding="utf-8")
-            print(f"  English narration saved: {en_txt.name}")
-
-        _gen_fn = _generate_duo_audio if duo else _generate_podcast_audio
-        if not _gen_fn(en_narrative, en_mp3, lang="en"):
+    # --- Evidence-first pipeline ---
+    if pipeline == "evidence":
+        print(f"\n  Using evidence-first pipeline for {clean_name}")
+        try:
+            en_txt, en_mp3 = _run_evidence_pipeline(
+                summary_text, clean_name, podcast_path,
+                video_title=video_title, extra_prompt=extra_prompt,
+                target_words=target_words, duo=duo,
+            )
+        except PipelineStageError as e:
+            print(f"\n  Pipeline failed at stage '{e.stage}': {e}")
+            print(f"  Last artifact: {e.artifact_path or 'none'}")
             return None
+    else:
+        # --- Summary-first pipeline (existing) ---
+        en_txt = podcast_path / f"{clean_name}.podcast.txt"
+        en_mp3 = podcast_path / f"{clean_name}.podcast.mp3"
+
+        if en_mp3.exists():
+            print(f"English podcast already exists: {en_mp3}")
+        else:
+            if en_txt.exists():
+                print(f"English narration exists, skipping MiniMax")
+                en_narrative = en_txt.read_text(encoding="utf-8")
+            else:
+                en_narrative = _narrate_as_podcast(
+                    summary_text, video_title=video_title,
+                    extra_prompt=extra_prompt, target_words=target_words, language="en", duo=duo)
+                if not en_narrative:
+                    print("Failed to generate English narration.")
+                    return None
+                en_narrative = _polish_for_tts(en_narrative, language="en", duo=duo)
+                en_txt.write_text(en_narrative, encoding="utf-8")
+                print(f"  English narration saved: {en_txt.name}")
+
+            _gen_fn = _generate_duo_audio if duo else _generate_podcast_audio
+            if not _gen_fn(en_narrative, en_mp3, lang="en"):
+                return None
 
     # --- Spanish ---
     es_txt = podcast_path / f"{clean_name}.podcast.es.txt"
