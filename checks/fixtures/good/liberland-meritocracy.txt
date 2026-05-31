@@ -1,0 +1,31 @@
+In this episode you will learn two things: how Liberland's direct meritocracy
+actually works, and why its founder thinks voting is the wrong tool for
+governing a nation.
+
+Vit Jedlicka proclaimed Liberland on the western bank of the Danube on the 13th
+of April 2015. The seven square kilometres between Croatia and Serbia were
+unclaimed — a terra nullius left over from a border dispute that neither country
+wanted to own. Within a year, half a million people had applied for citizenship.
+
+The system Jedlicka designed is not a democracy. It is a direct meritocracy.
+Citizens earn voting power by contributing to the community — building
+infrastructure, providing services, or creating economic value. One
+contribution, one vote weight. No hereditary privilege. No party machines.
+
+The blockchain handles the accounting. Every contribution is recorded
+on-chain, and the merit score determines your weight in referendums. The
+counter-argument is obvious: who decides what counts as a contribution? The
+answer, for now, is Liberland's council — a small group Jedlicka appointed
+directly. That centralisation is the weak spot, and Jedlicka knows it.
+
+Liberland has no income tax. Its revenue model relies on transaction fees,
+donations, and the appreciation of its land. Whether that scales past a few
+hundred residents is an open question.
+
+What Liberland proves is that the mechanics of governance are up for grabs.
+The nation-state model has been frozen since Westphalia in 1648. Jedlicka is
+betting that technology — blockchain, smart contracts, merit-based voting —
+can unfreeze it. The experiment is barely a decade old. The results are not
+yet in, but the question Liberland asks is one that every taxpayer should be
+asking: who consented to the system you live under, and what would you change
+if you could start from scratch?
