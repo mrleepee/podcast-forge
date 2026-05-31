@@ -22,6 +22,7 @@ from pathlib import Path
 
 _MINIMAX_API_URLS = [
     "https://api.minimax.chat/v1/text/chatcompletion_v2",
+    "https://api.minimax.io/v1/text/chatcompletion_v2",
 ]
 
 
@@ -66,6 +67,9 @@ def _call_minimax(system_prompt: str, user_prompt: str,
         except urllib.error.HTTPError as e:
             err_body = e.read().decode("utf-8", errors="replace")
             last_error = f"MiniMax API error {e.code} ({api_url}): {err_body}"
+            continue
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            last_error = f"MiniMax API connection error ({api_url}): {e}"
             continue
 
     raise RuntimeError(last_error or "All MiniMax API URLs failed")

@@ -59,6 +59,15 @@ def run_quality_gate(
     failures = []
 
     for name, check_fn in checks_to_run:
+        # Skip audio-dependent checks when no audio is available
+        if name == "loudness" and not audio_path:
+            results[name] = {
+                "passed": True,
+                "reason": "skipped: no audio file available",
+                "metrics": {},
+            }
+            continue
+
         result = check_fn(fixture)
         results[name] = {
             "passed": result.passed,
