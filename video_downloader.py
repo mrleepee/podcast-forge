@@ -2070,12 +2070,12 @@ def _run_evidence_pipeline(summary_text, clean_name, podcast_path,
 
     # Master audio to broadcast loudness
     try:
-        from checks.master_audio import master_audio
-        mastered = master_audio(str(en_mp3))
-        if mastered:
-            import shutil
-            shutil.move(mastered, str(en_mp3))
-            print(f"    Mastered: {en_mp3.name}")
+        from checks.master_audio import master
+        result = master(str(en_mp3))
+        if result.get("normalised"):
+            print(f"    Mastered: {en_mp3.name} ({result.get('integrated_lufs')} LUFS)")
+        else:
+            print(f"    Audio already in range: {en_mp3.name}")
     except Exception as e:
         print(f"    Mastering skipped: {e}")
 
@@ -2291,17 +2291,14 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
 
     # --- Master audio to broadcast loudness (-16 LUFS) ---
     try:
-        from checks.master_audio import master_audio
+        from checks.master_audio import master
         for mp3_path in [en_mp3, es_mp3]:
             if mp3_path.exists():
-                mastered = master_audio(str(mp3_path))
-                if mastered:
-                    print(f"  Mastered: {mp3_path.name} → {mastered}")
-                    # Replace original with mastered version
-                    import shutil
-                    shutil.move(mastered, str(mp3_path))
+                result = master(str(mp3_path))
+                if result.get("normalised"):
+                    print(f"  Mastered: {mp3_path.name} ({result.get('integrated_lufs')} LUFS)")
                 else:
-                    print(f"  Mastering skipped for {mp3_path.name}")
+                    print(f"  Audio already in range: {mp3_path.name}")
     except ImportError:
         print("  Audio mastering not available (checks/master_audio.py not found).")
     except Exception as e:

@@ -38,6 +38,18 @@ _RE_NUMBER = re.compile(
     r'|\b(18|19|20)\d{2}\b',      # years
 )
 
+# Word-form numbers — narrated audio spells out digits
+_WORD_NUMBERS = re.compile(
+    r'\b(?:one|two|three|four|five|six|seven|eight|nine|ten'
+    r'|eleven|twelve|thirteen|fourteen|fifteen|sixteen'
+    r'|seventeen|eighteen|nineteen|twenty'
+    r'|thirty|forty|fifty|sixty|seventy|eighty|ninety'
+    r'|hundred|thousand|million|billion|trillion'
+    r'|first|second|third|fourth|fifth|half|quarter'
+    r'|zero|none|dozen|couple)\b',
+    re.IGNORECASE,
+)
+
 # Named sources: "according to X", "X reported", "X found", proper nouns in attribution
 _RE_NAMED_SOURCE = re.compile(
     r'(?:according to|reported by|found by|noted by|said|wrote|published)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)',
@@ -63,8 +75,10 @@ def _count_fillers(text: str) -> list[str]:
 
 
 def _count_numbers(text: str) -> int:
-    """Count specific numbers, dates, and years."""
-    return len(_RE_NUMBER.findall(text))
+    """Count specific numbers, dates, years, and word-form numbers."""
+    digit_count = len(_RE_NUMBER.findall(text))
+    word_count = len(_WORD_NUMBERS.findall(text))
+    return digit_count + word_count
 
 
 def _count_sources(text: str) -> int:
