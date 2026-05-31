@@ -6,7 +6,7 @@ produces a checkable artifact, and the script is written from evidence — not f
 a compressed summary.
 
 **Initiative:** Podcast quality upgrade — pipeline refactor
-**Status:** draft
+**Status:** implemented
 **Branch:** `feature/evidence-first-pipeline`
 
 ## Requirements
@@ -21,9 +21,9 @@ a compressed summary.
 
 ## Phases
 
-### Phase 1 — Pipeline scaffolding and flag [not started]
+### Phase 1 — Pipeline scaffolding and flag [done]
 
-**Status:** not started
+**Status:** done
 **Fixes:** R5 (partial), R6 (partial)
 
 #### Behaviour
@@ -45,9 +45,9 @@ a compressed summary.
 - Removing the old pipeline.
 - CLI `--evidence-first` flag (wired through the `produce_podcast` parameter for now).
 
-### Phase 2 — Evidence extraction agent [not started]
+### Phase 2 — Evidence extraction agent [done]
 
-**Status:** not started
+**Status:** done
 **Fixes:** R1
 
 #### Behaviour
@@ -70,9 +70,9 @@ a compressed summary.
 - Evidence verification (checking if claims are actually true).
 - Multi-source evidence fusion (combining evidence from multiple transcripts).
 
-### Phase 3 — Thesis and outline agent [not started]
+### Phase 3 — Thesis and outline agent [done]
 
-**Status:** not started
+**Status:** done
 **Fixes:** R3
 
 #### Behaviour
@@ -93,9 +93,9 @@ a compressed summary.
 - Multiple outline candidates (the quality spec recommends 3; this generates 1).
 - Automated angle selection between multiple outlines.
 
-### Phase 4 — Script drafting from outline + evidence [not started]
+### Phase 4 — Script drafting from outline + evidence [done]
 
-**Status:** not started
+**Status:** done
 **Fixes:** R1, R3
 
 #### Behaviour
@@ -116,9 +116,9 @@ a compressed summary.
 
 - Replacing the existing narration prompt (it is adapted, not replaced).
 
-### Phase 5 — Revision loop with content QA [not started]
+### Phase 5 — Revision loop with content QA [done]
 
-**Status:** not started
+**Status:** done
 **Fixes:** R4
 
 #### Behaviour
