@@ -29,6 +29,7 @@
     "source": "manual",
     "word": "BTC"
   },
+  "cbdc": "C-B-D-C (central bank digital currency)",
   "ceo": {
     "ipa": "\u02ccsi\u02d0\u02cci\u02d0\u02c8o\u028a",
     "source": "manual",
@@ -108,6 +109,11 @@
     "ipa": "\u02cca\u026asi\u02d0\u02c8o\u028a",
     "source": "manual",
     "word": "ICO"
+  },
+  "ide": {
+    "ipa": "a\u026ad",
+    "source": "wiktionary",
+    "word": "IDE"
   },
   "ipv6": {
     "ipa": "\u02cca\u026a\u02c8pi\u02d0v\u0259\u0279si\u0259n\u02c8s\u026aks",
@@ -239,6 +245,7 @@
     "source": "manual",
     "word": "Redis"
   },
+  "rest": "rest (as in REST API)",
   "rust": {
     "ipa": "\u0279\u028cst",
     "source": "wiktionary",
@@ -309,6 +316,7 @@
     "source": "manual",
     "word": "Wireshark"
   },
+  "x402": "x-four-oh-two",
   "xrp": {
     "ipa": "\u02cc\u025bks\u02cc\u0251\u02d0r\u02c8pi\u02d0",
     "source": "manual",
@@ -318,8 +326,5 @@
     "ipa": "\u02c8j\u00e6m\u0259l",
     "source": "manual",
     "word": "YAML"
-  },
-  "rest": "rest (as in REST API)",
-  "x402": "x-four-oh-two",
-  "cbdc": "C-B-D-C (central bank digital currency)"
+  }
 }

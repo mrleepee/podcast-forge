@@ -80,3 +80,43 @@ The spec is marked "Status: implemented" with "all phases done", but the verific
 - Ran `_build_opening_avoidance()` directly → reproduced `IndexError: no such group` at `pipeline_stages.py:251`.
 - Traced `_call_minimax_via_existing` → it calls `_summarize_with_minimax(user_prompt)` and never passes the system prompt.
 - Confirmed `checks/` on this branch contains only `check_opening.py` (no `quality_gate.py`/`check_substance.py`), so the QA loop import fails at runtime.
+
+---
+
+## Update — 2026-05-31 (second pass, after fixes)
+
+**Reviewed at:** `bf2446e`. Fixes landed in `afeaeab` ("Fix review findings #1 #2 #5"); PR #3's checks were cherry-picked in `6df523e`–`bf2446e`.
+
+### Verified fixed (confirmed by reading + running)
+
+- **#1 (LLM prompts):** `_call_minimax` now sends the stage-specific system prompt (model `MiniMax-M2.7`, `MINIMAX_API_KEY`, URL rotation). `extract_evidence`/`generate_outline` call it directly. The subprocess hack and the dead `_call_minimax` are removed. The forensic-analyst and editor agents now actually run.
+- **#2 (crash):** `m.group(1)` → `m.group(0)` at `pipeline_stages.py:249`. Ran `_build_opening_avoidance()` — it returns a proper instruction string, no `IndexError`.
+- **#5 (loud fallbacks):** `extract_evidence` and `generate_outline` now `raise RuntimeError` on insufficient or non-JSON output instead of emitting boilerplate; the deterministic functions are explicitly marked test-only.
+- **#6 (spec status):** now honest — "review fixes applied… pending end-to-end validation".
+- **#3 (cherry-pick):** all PR #3 check modules are present on the branch (`quality_gate.py`, `check_substance.py`, `master_audio.py`, etc.).
+
+### New issue introduced by the integration
+
+- **The QA revision loop fails on every episode — on loudness, not content.** `_run_qa_revision_loop` calls `run_quality_gate(script_text)` with no audio (`video_downloader.py:2097`), and `run_quality_gate` runs the loudness check on missing audio. Verified by running: `report.passed = False`, blocking failure `loudness: no audio file found`. So at the text stage loudness is unconditionally FAIL → the loop re-drafts up to 3 times (3 wasted MiniMax calls) → writes `qa_exhausted: true` for every episode, regardless of script quality. `run_quality_gate`'s own docstring says audio-less checks should be "skipped, not failures," but that is not implemented. **Fix:** skip loudness when `audio_path is None`; run loudness only on the final (mastered) audio.
+
+### Still open / carried over from PR #3 (cherry-picked unfixed)
+
+- **`master_audio` is still not wired into `video_downloader.py`** — loudness is never applied, so episodes still ship at ~-25 LUFS (and it's why the loudness check would fail even if audio were passed).
+- **Publish gate is still advisory** — `_run_quality_gate(...)`'s return is discarded (`video_downloader.py:2282`); it prints a warning and blocks nothing.
+- **`python checks/run.py` still crashes** (`No module named 'checks'`); only `python -m checks.run` works.
+- **#4 (end-to-end test) still missing.** Nothing in the suite caught the QA-loop false-failure above — the exact gap an e2e test through `_run_evidence_pipeline` would close. (Sandbox shows 4 failures, but those are only `yt_dlp` not installed here; they pass on a configured machine. 36 pass.)
+
+### Minor
+
+- The new `_call_minimax` only catches `HTTPError` in its retry loop, so a network/timeout error propagates raw instead of as a clean `RuntimeError`; and it kept only the `.chat` endpoint, dropping the `.io` backup that `_summarize_with_minimax` uses.
+
+### Recommended next step
+
+Two changes make the loudness story real and stop the loop thrashing: (1) skip loudness in `run_quality_gate` when there's no audio (one conditional — unblocks the entire evidence QA loop), and (2) wire `master_audio` at the export step so the final file is actually normalized to -16 LUFS.
+
+### How this round was verified
+
+- Ran `_build_opening_avoidance()` → returns a string (crash fixed).
+- Ran `run_quality_gate("<clean script>")` with no audio → `passed = False`, blocked on `loudness: no audio file found` (confirms the QA-loop bug).
+- Read the new `_call_minimax`, `extract_evidence`, `generate_outline` → system prompt sent, loud `RuntimeError` on failure.
+- `grep` confirmed `master_audio`/`master(` is still never called in `video_downloader.py`; `python checks/run.py` still raises `ModuleNotFoundError`.
