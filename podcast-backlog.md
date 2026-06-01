@@ -22,19 +22,19 @@
 Categories: 🤖 AI · 🏠 Nomad · 🏛️ Libertarian · 💰 Finance · 🎥 Video
 Liberland episodes spaced with 4 non-Liberland between each.
 
-1. 🤖 **AI Made Us Faster. That Was the Problem** — David Fowler (Aspire/.NET)
-   - Category: AI
-   - Source: https://www.linkedin.com/pulse/ai-made-us-faster-problem-david-fowler-mgnzc/
-   - Type: Topic/research-based
-   - Flags: default (~5 min)
-   - Notes: Real-world lessons from the Aspire team going AI-first — production got cheaper but maintenance didn't, experienced engineers feel regression, agent-readiness as codebase health, the bottleneck moves but doesn't disappear
-
-2. 💰 **The AI Layoff Trap — Wharton & BU Prove Automation Destroys Its Own Market**
+1. 💰 **The AI Layoff Trap — Wharton & BU Prove Automation Destroys Its Own Market**
    - Category: Finance / Economics
    - Source: https://arxiv.org/abs/2603.20617 (original paper, NOT aggregator tweet)
    - Type: Topic/research-based
    - Flags: `--long` (~10 min)
    - Notes: "The AI Layoff Trap" by Brett Hemenway Falk (Wharton) and Gerry Tsoukalas (Boston University), March 2026. 53-page game-theoretic proof that rational AI automation creates a Prisoner's Dilemma — individual firms cut workers to save costs, collectively destroying consumer purchasing power. No single firm has incentive to stop automating even though the outcome harms everyone. "Coordination failure" — competitive firms over-automate even leading to economic collapse. A follow-up paper "Beyond the AI Layoff Trap" appeared on SSRN. Señora Freedom angle: "rational market behavior" is self-destructive — the consent problem writ large. Workers didn't consent to being laid off, and the market doesn't self-correct because no individual actor has the incentive to stop. Connect to ep110 (Robinhood agents replacing traders), ep107 (taxation as coercive extraction), the Karpathy "software 3.0" thesis.
+
+2. 🤖 **AI Made Us Faster. That Was the Problem** — David Fowler (Aspire/.NET)
+   - Category: AI
+   - Source: https://www.linkedin.com/pulse/ai-made-us-faster-problem-david-fowler-mgnzc/
+   - Type: Topic/research-based
+   - Flags: default (~5 min)
+   - Notes: Real-world lessons from the Aspire team going AI-first — production got cheaper but maintenance didn't, experienced engineers feel regression, agent-readiness as codebase health, the bottleneck moves but doesn't disappear
 
 3. 🎥 **X/Twitter video — @trq212**
    - Source: https://x.com/trq212/status/2044548257058328723
