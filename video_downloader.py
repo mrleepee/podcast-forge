@@ -1465,6 +1465,45 @@ _BRITISH_VOICES = [
 
 _SPANISH_VOICES = ["ef_dora", "em_alex", "em_santa"]
 
+# --- OmniVoice TTS (default engine; set TTS_ENGINE=kokoro to fall back) ---
+# The worker runs under OmniVoice's own venv (heavy deps isolated from this one).
+_OMNIVOICE_PY = os.environ.get(
+    "OMNIVOICE_PY",
+    str(Path.home() / "Dev" / "OmniVoice-Studio" / ".venv" / "bin" / "python"),
+)
+_OMNIVOICE_WORKER = str(Path(__file__).resolve().parent / "tts_omnivoice.py")
+_OMNIVOICE_MODEL = os.environ.get("OMNIVOICE_MODEL", "k2-fsa/OmniVoice")
+# Voice-design instructions. Accents are English-only in OmniVoice, so Spanish
+# uses a plain female voice. _B variants give the second speaker in duo mode a
+# distinct timbre. (ref_audio voice-cloning is the planned upgrade — not wired yet.)
+# Speech pace. 0.85 matches the old Kokoro cadence (which ran ~0.85 effective).
+_OMNI_SPEED = float(os.environ.get("OMNIVOICE_SPEED", "0.85"))
+_OMNI_INSTRUCT_EN = "female, british accent, young adult"
+_OMNI_INSTRUCT_EN_B = "male, british accent, young adult"
+_OMNI_INSTRUCT_ES = "female, young adult"
+_OMNI_INSTRUCT_ES_B = "male, young adult"
+
+# Locked podcast voice: when this reference clip exists, OmniVoice clones it
+# (consistent timbre across episodes + both languages) instead of using instruct.
+# Override/disable via OMNIVOICE_REF_AUDIO env ("" disables → instruct mode).
+_OMNI_REF_DEFAULT = str(Path(__file__).resolve().parent / "voice_ref" / "senora_freedom_en_ref.wav")
+_OMNI_REF_AUDIO = os.environ.get("OMNIVOICE_REF_AUDIO", _OMNI_REF_DEFAULT)
+if _OMNI_REF_AUDIO and not Path(_OMNI_REF_AUDIO).exists():
+    _OMNI_REF_AUDIO = ""  # fall back to instruct mode if the clip is missing
+# Explicit transcript of the reference clip. REQUIRED for clean cloning: without
+# it OmniVoice auto-transcribes + trims the clip, misaligning audio/text and
+# echoing reference fragments (e.g. a stray "fresh") into every chunk.
+_OMNI_REF_TEXT = ""
+if _OMNI_REF_AUDIO:
+    _ref_txt_path = Path(_OMNI_REF_AUDIO).with_suffix(".txt")
+    if _ref_txt_path.exists():
+        _OMNI_REF_TEXT = _ref_txt_path.read_text().strip()
+
+
+def _use_omnivoice() -> bool:
+    """OmniVoice is the default engine; TTS_ENGINE=kokoro selects the legacy path."""
+    return os.environ.get("TTS_ENGINE", "omnivoice").lower() != "kokoro"
+
 
 def _parse_dialogue(text):
     """Parse duo narration text into list of (speaker, text) tuples.
@@ -1483,8 +1522,185 @@ def _parse_dialogue(text):
     return segments
 
 
+def _chunk_text(text, max_chars=600):
+    """Split text into sentence-grouped chunks of at most ~max_chars.
+
+    Keeps each OmniVoice generate() call bounded (long single calls degrade the
+    model's duration estimate) while preserving sentence boundaries for prosody.
+    """
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    chunks, cur = [], ""
+    for s in sentences:
+        s = s.strip()
+        if not s:
+            continue
+        if cur and len(cur) + 1 + len(s) > max_chars:
+            chunks.append(cur)
+            cur = s
+        else:
+            cur = f"{cur} {s}".strip()
+    if cur:
+        chunks.append(cur)
+    return chunks
+
+
+# Literal pre-TTS fixups for the OmniVoice path (engine reads these better than
+# the raw form). Grow empirically from verification listen-throughs.
+_OMNI_TEXT_FIXUPS = [
+    ("tmux", "tee-mux"),
+]
+
+
+def _omnivoice_fixups(text):
+    for needle, repl in _OMNI_TEXT_FIXUPS:
+        text = re.sub(rf'\b{re.escape(needle)}\b', repl, text)
+    return text
+
+
+def _omnivoice_render(segments, output_mp3_path, *, silence_sec=0.12):
+    """Render pre-built segments via the OmniVoice worker subprocess → MP3.
+
+    segments: list of {"text", "language" ("English"|"Spanish"), "instruct"?}.
+    Loads the model once in the worker, concatenates the per-segment WAVs with a
+    short gap, then reuses the same libmp3lame encode as the Kokoro path. Returns bool.
+    """
+    import tempfile
+    import soundfile as sf
+    import numpy as np
+
+    segments = [s for s in segments if s.get("text", "").strip()]
+    if not segments:
+        print("  OmniVoice: no segments to render.")
+        return False
+
+    tmpdir = tempfile.mkdtemp(prefix="omnivoice_")
+    try:
+        job_segments = []
+        for i, seg in enumerate(segments):
+            entry = {
+                "text": seg["text"],
+                "language": seg["language"],
+                "out_wav": os.path.join(tmpdir, f"seg{i:03d}.wav"),
+            }
+            if seg.get("instruct"):
+                entry["instruct"] = seg["instruct"]
+            job_segments.append(entry)
+
+        job = {
+            "model": _OMNIVOICE_MODEL,
+            "instruct_en": _OMNI_INSTRUCT_EN,
+            "instruct_es": _OMNI_INSTRUCT_ES,
+            "speed": _OMNI_SPEED,
+            "segments": job_segments,
+        }
+        if _OMNI_REF_AUDIO:
+            # Voice-clone mode: locked timbre overrides instruct for all segments.
+            job["ref_audio"] = _OMNI_REF_AUDIO
+            if _OMNI_REF_TEXT:
+                job["ref_text"] = _OMNI_REF_TEXT
+        job_path = os.path.join(tmpdir, "job.json")
+        with open(job_path, "w") as fh:
+            json.dump(job, fh)
+
+        print(f"  OmniVoice: rendering {len(job_segments)} segment(s)...")
+        proc = subprocess.run(
+            [_OMNIVOICE_PY, _OMNIVOICE_WORKER, job_path],
+            capture_output=True, text=True,
+        )
+        if proc.returncode != 0:
+            print(f"  OmniVoice worker failed (rc={proc.returncode}): {proc.stderr.strip()[-500:]}")
+            return False
+        try:
+            status = json.loads(proc.stdout.strip().splitlines()[-1])
+        except Exception as e:
+            print(f"  OmniVoice: unparseable worker output: {e}\n{proc.stdout[-300:]}")
+            return False
+        if not status.get("ok"):
+            print(f"  OmniVoice worker error: {status.get('error')}")
+            return False
+
+        sr = status.get("sample_rate", 24000)
+        silence = np.zeros(int(silence_sec * sr))
+        parts = []
+        multi = len(job_segments) > 1
+        for seg in job_segments:
+            wav, _ = sf.read(seg["out_wav"])
+            if wav.ndim > 1:
+                wav = wav.mean(axis=1)
+            parts.append(wav)
+            if multi:
+                parts.append(silence)
+        full = np.concatenate(parts)
+        duration = len(full) / sr
+
+        wav_path = str(output_mp3_path).rsplit(".", 1)[0] + ".tmp.wav"
+        sf.write(wav_path, full, sr)
+        cmd = ["ffmpeg", "-y", "-i", wav_path,
+               "-codec:a", "libmp3lame", "-qscale:a", "2", str(output_mp3_path)]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        Path(wav_path).unlink(missing_ok=True)
+        if result.returncode != 0:
+            print(f"  ffmpeg error: {result.stderr.strip()}")
+            return False
+
+        size_mb = Path(output_mp3_path).stat().st_size / (1024 * 1024)
+        print(f"  OmniVoice MP3 saved: {output_mp3_path} ({size_mb:.1f}MB, {duration/60:.1f}min)")
+        return True
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def _generate_omnivoice_audio(narrative_text, output_mp3_path, lang="en", mode="solo"):
+    """OmniVoice replacement for the Kokoro generators (solo/duo/bilingual)."""
+    lang_name = "Spanish" if lang == "es" else "English"
+
+    if mode == "bilingual":
+        segs = []
+        for line in narrative_text.strip().splitlines():
+            line = line.strip()
+            if line.startswith("ES:"):
+                for ch in _chunk_text(line[3:].strip()):
+                    segs.append({"text": ch, "language": "Spanish"})
+            elif line.startswith("EN:"):
+                for ch in _chunk_text(_omnivoice_fixups(line[3:].strip())):
+                    segs.append({"text": ch, "language": "English"})
+        if not segs:
+            print("  No ES:/EN: lines found in bilingual text.")
+            return False
+        return _omnivoice_render(segs, output_mp3_path)
+
+    if mode == "duo":
+        parsed = _parse_dialogue(narrative_text)
+        if len(parsed) < 3:
+            return _generate_omnivoice_audio(narrative_text, output_mp3_path, lang=lang, mode="solo")
+        seen = []
+        for spk, _ in parsed:
+            if spk not in seen:
+                seen.append(spk)
+        speaker_a = seen[0]
+        instruct_a = _OMNI_INSTRUCT_ES if lang == "es" else _OMNI_INSTRUCT_EN
+        instruct_b = _OMNI_INSTRUCT_ES_B if lang == "es" else _OMNI_INSTRUCT_EN_B
+        segs = []
+        for spk, text in parsed:
+            if lang != "es":
+                text = _omnivoice_fixups(text)
+            instruct = instruct_a if spk == speaker_a else instruct_b
+            for ch in _chunk_text(text):
+                segs.append({"text": ch, "language": lang_name, "instruct": instruct})
+        print(f"  OmniVoice duo: {len(parsed)} turns, speaker_a={speaker_a}")
+        return _omnivoice_render(segs, output_mp3_path)
+
+    # solo
+    text = narrative_text if lang == "es" else _omnivoice_fixups(narrative_text)
+    segs = [{"text": ch, "language": lang_name} for ch in _chunk_text(text)]
+    return _omnivoice_render(segs, output_mp3_path)
+
+
 def _generate_duo_audio(narrative_text, output_mp3_path, lang="en"):
     """Generate two-speaker podcast audio with distinct voices per speaker."""
+    if _use_omnivoice():
+        return _generate_omnivoice_audio(narrative_text, output_mp3_path, lang=lang, mode="duo")
+
     from kokoro import KPipeline
     import soundfile as sf
     import numpy as np
@@ -1573,6 +1789,9 @@ def _generate_duo_audio(narrative_text, output_mp3_path, lang="en"):
 
 def _generate_bilingual_audio(narrative_text, output_mp3_path):
     """Generate bilingual podcast audio: ES lines in Spanish voice, EN lines in English voice."""
+    if _use_omnivoice():
+        return _generate_omnivoice_audio(narrative_text, output_mp3_path, mode="bilingual")
+
     from kokoro import KPipeline
     import soundfile as sf
     import numpy as np
@@ -1671,6 +1890,9 @@ def _prepare_pronunciation(text: str):
 
 def _generate_podcast_audio(narrative_text, output_mp3_path, lang="en"):
     """Generate podcast audio using Kokoro TTS and convert to MP3."""
+    if _use_omnivoice():
+        return _generate_omnivoice_audio(narrative_text, output_mp3_path, lang=lang, mode="solo")
+
     from kokoro import KPipeline
     import soundfile as sf
     import numpy as np
@@ -2412,7 +2634,7 @@ def publish_feed():
     result = subprocess.run(
         [sys.executable, str(generate_rss),
          "--base-url", "https://mrleepee.github.io/freeist-podcast/audio/",
-         "--title", "Señor Freedom",
+         "--title", "Señora Freedom",
          "--output", str(_RSS_OUTPUT)],
         capture_output=True, text=True,
     )

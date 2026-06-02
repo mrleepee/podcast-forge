@@ -1,0 +1,1 @@
+Drop the debugging so it knows what to preserve. Then there is clear, which wipes everything, but you write down what matters.
