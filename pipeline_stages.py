@@ -79,12 +79,38 @@ def _call_minimax(system_prompt: str, user_prompt: str,
 # Verification client (Phase 7) — independent model for fact-checking
 # ---------------------------------------------------------------------------
 
-_ZAI_API_KEY = os.environ.get("ZAI_API_KEY")
 _ZAI_API_URL = "https://api.z.ai/api/paas/v4/chat/completions"
 _VERIFIER_MODEL = os.environ.get("VERIFIER_MODEL", "glm-5.1")
 
 # Maximum high-confidence untraceable claims before QA fails.
 _VERIFICATION_THRESHOLD = int(os.environ.get("VERIFICATION_THRESHOLD", "3"))
+
+# Fallback key location: the Z.ai token also lives in the Claude Code GLM
+# settings profile as env.ANTHROPIC_AUTH_TOKEN (an OpenAI-compatible Z.ai key).
+_GLM_SETTINGS_PATH = Path.home() / ".claude" / "settings-GLM.json"
+
+
+def _resolve_zai_key() -> str | None:
+    """Resolve the Z.ai/GLM API key at call time.
+
+    Resolution order:
+    1. ``ZAI_API_KEY`` environment variable (explicit override).
+    2. ``env.ANTHROPIC_AUTH_TOKEN`` from ``~/.claude/settings-GLM.json``.
+
+    Returns None if neither is available, so verification can skip gracefully.
+    Resolved at call time (not import) so the key can be provided after import.
+    """
+    key = os.environ.get("ZAI_API_KEY")
+    if key:
+        return key.strip()
+    try:
+        settings = json.loads(_GLM_SETTINGS_PATH.read_text(encoding="utf-8"))
+        token = settings.get("env", {}).get("ANTHROPIC_AUTH_TOKEN")
+        if token and token.strip():
+            return token.strip()
+    except (OSError, json.JSONDecodeError):
+        pass
+    return None
 
 
 def call_verifier(system_prompt: str | None, user_prompt: str,
@@ -94,8 +120,12 @@ def call_verifier(system_prompt: str | None, user_prompt: str,
     Retries once on transient errors; after the second failure, raises
     RuntimeError so the caller can skip verification gracefully.
     """
-    if not _ZAI_API_KEY:
-        raise RuntimeError("ZAI_API_KEY not set — verification unavailable")
+    api_key = _resolve_zai_key()
+    if not api_key:
+        raise RuntimeError(
+            "Z.ai key not found (set ZAI_API_KEY or env.ANTHROPIC_AUTH_TOKEN "
+            f"in {_GLM_SETTINGS_PATH}) — verification unavailable"
+        )
 
     messages = []
     if system_prompt:
@@ -115,7 +145,7 @@ def call_verifier(system_prompt: str | None, user_prompt: str,
             data=payload,
             headers={
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {_ZAI_API_KEY}",
+                "Authorization": f"Bearer {api_key}",
             },
         )
         try:
@@ -132,6 +162,71 @@ def call_verifier(system_prompt: str | None, user_prompt: str,
             last_error = f"Verifier connection error (attempt {attempt+1}): {e}"
 
     raise RuntimeError(last_error or "Verifier failed after retry")
+
+
+def verification_available() -> bool:
+    """True if a Z.ai/GLM key can be resolved (env or settings-GLM.json)."""
+    return _resolve_zai_key() is not None
+
+
+# B1 verification prompt schema — see spec Appendix B1.
+VERIFICATION_SYSTEM_PROMPT = (
+    "You are a skeptical fact-checker. Compare the podcast script against "
+    "the evidence map. For each factual claim in the script (numbers, dates, "
+    "quotes, names), check if the evidence map supports it. Return ONLY a "
+    "JSON array with entries:\n"
+    "- claim: the specific text from the script\n"
+    '- confidence: "high" if clearly missing, "medium" if ambiguous\n'
+    '- type: one of "number", "date", "quote", "name", "unattributed_expert"\n'
+    "- reason: brief justification"
+)
+
+
+def verify_script(script_text: str, evidence: list[dict]) -> dict:
+    """Phase 8: verify a draft script against the evidence map.
+
+    Calls the independent verifier (a different model than the drafter, to
+    decorrelate errors) and returns a structured result:
+
+        {
+            "claims":          [ {claim, confidence, type, reason}, ... ],
+            "high_confidence": int,   # count of confidence == "high"
+            "threshold":       int,   # _VERIFICATION_THRESHOLD
+            "passed":          bool,  # high_confidence <= threshold
+        }
+
+    Raises RuntimeError if the verifier is unavailable (no key) or the API
+    fails after one retry, so callers can skip verification gracefully.
+    Raises ValueError if the verifier returns an unparseable report.
+    """
+    user_prompt = (
+        f"## Evidence Map\n{json.dumps(evidence, indent=2, ensure_ascii=False)}\n\n"
+        f"## Script\n{script_text}"
+    )
+
+    response = call_verifier(VERIFICATION_SYSTEM_PROMPT, user_prompt)
+
+    match = re.search(r"\[.*\]", response, re.DOTALL)
+    if not match:
+        # No JSON array at all — treat as "nothing flagged".
+        claims: list[dict] = []
+    else:
+        try:
+            parsed = json.loads(match.group(0))
+        except json.JSONDecodeError as e:
+            raise ValueError(
+                f"Verifier returned unparseable report "
+                f"(first 200 chars: {response[:200]})"
+            ) from e
+        claims = parsed if isinstance(parsed, list) else []
+
+    high_confidence = sum(1 for c in claims if c.get("confidence") == "high")
+    return {
+        "claims": claims,
+        "high_confidence": high_confidence,
+        "threshold": _VERIFICATION_THRESHOLD,
+        "passed": high_confidence <= _VERIFICATION_THRESHOLD,
+    }
 
 
 # ---------------------------------------------------------------------------

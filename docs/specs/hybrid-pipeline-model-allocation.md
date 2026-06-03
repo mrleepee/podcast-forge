@@ -49,7 +49,7 @@ infrastructure first, then the stages that use it.
 
 ### Phase 6 — Full-context evidence extraction
 
-**Status:** not started
+**Status:** implemented (branch `feature/hybrid-pipeline-verification-glm-key`)
 **Fixes:** R7
 
 #### Behaviour
@@ -74,7 +74,7 @@ infrastructure first, then the stages that use it.
 
 ### Phase 7 — Independent verification client (infrastructure)
 
-**Status:** not started
+**Status:** implemented (branch `feature/hybrid-pipeline-verification-glm-key`)
 **Fixes:** R10 (prerequisite)
 
 #### Behaviour
@@ -99,7 +99,7 @@ See Appendix B2 for the verification client implementation and API configuration
 
 ### Phase 8 — Script verification against evidence
 
-**Status:** not started
+**Status:** implemented (branch `feature/hybrid-pipeline-verification-glm-key`)
 **Fixes:** R10
 
 #### Behaviour
