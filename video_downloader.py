@@ -1477,7 +1477,7 @@ _OMNIVOICE_MODEL = os.environ.get("OMNIVOICE_MODEL", "k2-fsa/OmniVoice")
 # uses a plain female voice. _B variants give the second speaker in duo mode a
 # distinct timbre. (ref_audio voice-cloning is the planned upgrade — not wired yet.)
 # Speech pace. 0.85 matches the old Kokoro cadence (which ran ~0.85 effective).
-_OMNI_SPEED = float(os.environ.get("OMNIVOICE_SPEED", "0.85"))
+_OMNI_SPEED = float(os.environ.get("OMNIVOICE_SPEED", "0.9"))
 _OMNI_INSTRUCT_EN = "female, british accent, young adult"
 _OMNI_INSTRUCT_EN_B = "male, british accent, young adult"
 _OMNI_INSTRUCT_ES = "female, young adult"
@@ -1555,6 +1555,36 @@ def _omnivoice_fixups(text):
     for needle, repl in _OMNI_TEXT_FIXUPS:
         text = re.sub(rf'\b{re.escape(needle)}\b', repl, text)
     return text
+
+
+# Intro/outro assets — prepended/appended to every episode before mastering.
+_INTRO_AUDIO = Path(__file__).resolve().parent / "assets" / "intro.mp3"
+_OUTRO_AUDIO = Path(__file__).resolve().parent / "assets" / "outro.mp3"
+
+
+def _splice_intro_outro(mp3_path: str | Path) -> bool:
+    """Prepend intro.mp3 and append outro.mp3 to a podcast MP3. Returns True on success."""
+    mp3_path = Path(mp3_path)
+    if not _INTRO_AUDIO.exists() or not _OUTRO_AUDIO.exists():
+        return False
+    tmp = mp3_path.with_suffix(".stitched.mp3")
+    # ffmpeg concat demuxer — re-encodes once for consistent format
+    concat_list = tmp.with_suffix(".txt")
+    concat_list.write_text(
+        f"file '{_INTRO_AUDIO}'\nfile '{mp3_path}'\nfile '{_OUTRO_AUDIO}'\n"
+    )
+    r = subprocess.run(
+        ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(concat_list),
+         "-codec:a", "libmp3lame", "-qscale:a", "2", str(tmp)],
+        capture_output=True, text=True,
+    )
+    concat_list.unlink(missing_ok=True)
+    if r.returncode != 0:
+        print(f"  Intro/outro splice failed: {r.stderr[-200:]}")
+        tmp.unlink(missing_ok=True)
+        return False
+    subprocess.run(["mv", str(tmp), str(mp3_path)], check=True)
+    return True
 
 
 def _omnivoice_render(segments, output_mp3_path, *, silence_sec=0.12):
@@ -2290,6 +2320,10 @@ def _run_evidence_pipeline(summary_text, clean_name, podcast_path,
             raise PipelineStageError("audio_generation",
                 "Kokoro synthesis failed", str(en_txt))
 
+    # Splice intro/outro before mastering
+    if _splice_intro_outro(en_mp3):
+        print("    Intro/outro added")
+
     # Master audio to broadcast loudness
     try:
         from checks.master_audio import master
@@ -2510,6 +2544,11 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
             else:
                 if not _gen_fn(es_narrative, es_mp3, lang="es"):
                     print("Spanish audio generation failed.")
+
+    # --- Splice intro/outro before mastering ---
+    for mp3_path in [en_mp3, es_mp3]:
+        if mp3_path.exists() and _splice_intro_outro(mp3_path):
+            print(f"  Intro/outro added: {mp3_path.name}")
 
     # --- Master audio to broadcast loudness (-16 LUFS) ---
     try:

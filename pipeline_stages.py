@@ -171,7 +171,11 @@ Return ONLY a JSON object. No prose, no markdown fences. The object must have:
 - evidence_beats: array of integers referencing evidence entry indices
 - counterpoint: the opposing view or limitation (1-2 sentences)
 - implication: what it means for the listener (1-2 sentences)
-- close: the ending strategy (implication, not generic wrap-up)
+- close: the actual closing lines (2-3 sentences), NOT a label or strategy. Land the \
+thesis as a personal stake, call back to the hook's specific image, and end on a short \
+declarative button line. You may end on a question ONLY if it is sharp, concrete, and \
+aimed straight at the listener — never an abstract "the question is whether..." \
+restatement. Do not trail off or end on a generic wrap-up.
 - warnings: array of strings (include "thin evidence: only N claims available" \
 if fewer than 5 evidence entries)"""
 
@@ -297,6 +301,13 @@ def draft_script(outline: dict, evidence: list[dict], soul_text: str,
         f"EVIDENCE:\n{evidence_claims}\n\n"
         f"Write the narration following this outline. Every factual claim must be "
         f"traceable to the evidence above. Do not introduce facts not in the evidence.\n\n"
+        f"FINALE: End deliberately — do not trail off or stop on a flat restatement. "
+        f"Develop the CLOSE into a real ending: in your final two to four sentences, land "
+        f"the implication as a personal stake and call back to the opening hook's specific "
+        f"image. Finish on a short, punchy, declarative line — or, when the hook invites it, "
+        f"a single sharp question aimed straight at the listener. Never end on an abstract "
+        f"\"the question you should ask is...\" construction, a generic summary, or a cliche "
+        f"like \"only time will tell\".\n\n"
         f"{opening_instruction}"
     )
 
