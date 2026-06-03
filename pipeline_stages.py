@@ -76,6 +76,65 @@ def _call_minimax(system_prompt: str, user_prompt: str,
 
 
 # ---------------------------------------------------------------------------
+# Verification client (Phase 7) — independent model for fact-checking
+# ---------------------------------------------------------------------------
+
+_ZAI_API_KEY = os.environ.get("ZAI_API_KEY")
+_ZAI_API_URL = "https://api.z.ai/api/paas/v4/chat/completions"
+_VERIFIER_MODEL = os.environ.get("VERIFIER_MODEL", "glm-5.1")
+
+# Maximum high-confidence untraceable claims before QA fails.
+_VERIFICATION_THRESHOLD = int(os.environ.get("VERIFICATION_THRESHOLD", "3"))
+
+
+def call_verifier(system_prompt: str | None, user_prompt: str,
+                  temperature: float = 0.2, timeout: int = 180) -> str:
+    """Call the independent verification model (GLM-5.1 via Z.ai by default).
+
+    Retries once on transient errors; after the second failure, raises
+    RuntimeError so the caller can skip verification gracefully.
+    """
+    if not _ZAI_API_KEY:
+        raise RuntimeError("ZAI_API_KEY not set — verification unavailable")
+
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": user_prompt})
+
+    payload = json.dumps({
+        "model": _VERIFIER_MODEL,
+        "messages": messages,
+        "temperature": temperature,
+    }).encode("utf-8")
+
+    last_error = None
+    for attempt in range(2):  # original + 1 retry
+        req = urllib.request.Request(
+            _ZAI_API_URL,
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {_ZAI_API_KEY}",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+            choices = body.get("choices") or []
+            if choices:
+                return choices[0].get("message", {}).get("content", "").strip()
+            last_error = f"Unexpected verifier response: {body}"
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8", errors="replace")
+            last_error = f"Verifier API error {e.code}: {err_body}"
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            last_error = f"Verifier connection error (attempt {attempt+1}): {e}"
+
+    raise RuntimeError(last_error or "Verifier failed after retry")
+
+
+# ---------------------------------------------------------------------------
 # Stage 1: Evidence extraction
 # ---------------------------------------------------------------------------
 
@@ -107,7 +166,16 @@ def extract_evidence(text: str) -> list[dict]:
             f"(received {len(text.split()) if text else 0} words, need ≥100)"
         )
 
-    prompt = f"Extract all evidence from the following text:\n\n{text[:8000]}"
+    # Safety cap: ~150k chars (~50k tokens, well within ~200K context).
+    # A 60-min transcript is ~15k words (~20k tokens) — fits ~10× in context.
+    _FULL_CONTEXT_CAP = 150_000
+    if len(text) > _FULL_CONTEXT_CAP:
+        dropped = len(text) - _FULL_CONTEXT_CAP
+        print(f"    WARNING: transcript truncated at {_FULL_CONTEXT_CAP:,} chars "
+              f"({dropped:,} chars dropped)")
+        text = text[:_FULL_CONTEXT_CAP]
+
+    prompt = f"Extract all evidence from the following text:\n\n{text}"
 
     response = _call_minimax(EXTRACTION_SYSTEM_PROMPT, prompt)
 
