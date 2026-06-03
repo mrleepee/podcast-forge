@@ -46,3 +46,9 @@ Liberland episodes spaced with 4 non-Liberland between each.
    - Type: URL-based
    - Flags: default (~5 min)
    - Notes: ClaudeDevs (Anthropic's Claude Code account) demo on getting Claude Code to check its own work before handing it back — encoding your manual review checks so Claude closes its own feedback loop (self-verification, automated QA gates). Connects to ep111 (build a system that prompts itself), ep115 (session management), and the evidence-first pipeline's own QA loop. Señora Freedom angle: if the agent grades its own homework, who sets the rubric?
+
+4. 🏠 **Istanbul Real Estate: Renovation Costs and ROI for Turkish CBI**
+   - Source: https://www.youtube.com/watch?v=N-qCy1CCcpY
+   - Type: URL-based
+   - Flags: default (~5 min)
+   - Notes: Investment analysis for Istanbul real estate targeting Turkish citizenship-by-investment (CBI). Covers renovation costs, ROI calculations, and practical considerations. **Format note: should be generalized advice (first-person or dialogue), not a case study of one specific property.**
