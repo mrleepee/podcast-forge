@@ -76,6 +76,192 @@ def _call_minimax(system_prompt: str, user_prompt: str,
 
 
 # ---------------------------------------------------------------------------
+# Verification client (Phase 7) — independent model for fact-checking
+# ---------------------------------------------------------------------------
+
+# Z.ai exposes two APIs behind the same token:
+#   - /api/paas/v4/chat/completions (OpenAI-compatible) — billed against a
+#     prepaid API balance.
+#   - /api/anthropic (Anthropic Messages API) — covered by the GLM Coding Plan
+#     subscription, which is how Claude Code uses GLM without per-token credits.
+# We use the Anthropic-compatible endpoint so verification runs on the same
+# subscription as Claude Code (no API top-up required).
+_ZAI_ANTHROPIC_BASE = "https://api.z.ai/api/anthropic"
+_ZAI_ANTHROPIC_VERSION = "2023-06-01"
+_VERIFIER_MODEL = os.environ.get("VERIFIER_MODEL", "glm-5.1")
+_VERIFIER_MAX_TOKENS = int(os.environ.get("VERIFIER_MAX_TOKENS", "8192"))
+
+# Maximum high-confidence untraceable claims before QA fails.
+_VERIFICATION_THRESHOLD = int(os.environ.get("VERIFICATION_THRESHOLD", "3"))
+
+# Fallback key location: the Z.ai token lives in the Claude Code GLM settings
+# profile as env.ANTHROPIC_AUTH_TOKEN, alongside the coding-plan base URL.
+_GLM_SETTINGS_PATH = Path.home() / ".claude" / "settings-GLM.json"
+
+
+def _read_glm_settings() -> dict:
+    """Return the env block of ~/.claude/settings-GLM.json (empty on failure)."""
+    try:
+        settings = json.loads(_GLM_SETTINGS_PATH.read_text(encoding="utf-8"))
+        env = settings.get("env", {})
+        return env if isinstance(env, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _resolve_zai_key() -> str | None:
+    """Resolve the Z.ai/GLM API key at call time.
+
+    Resolution order:
+    1. ``ZAI_API_KEY`` environment variable (explicit override).
+    2. ``env.ANTHROPIC_AUTH_TOKEN`` from ``~/.claude/settings-GLM.json``.
+
+    Returns None if neither is available, so verification can skip gracefully.
+    Resolved at call time (not import) so the key can be provided after import.
+    """
+    key = os.environ.get("ZAI_API_KEY")
+    if key and key.strip():
+        return key.strip()
+    token = _read_glm_settings().get("ANTHROPIC_AUTH_TOKEN")
+    if token and token.strip():
+        return token.strip()
+    return None
+
+
+def _resolve_zai_messages_url() -> str:
+    """Resolve the Anthropic-compatible /v1/messages URL.
+
+    Honours ANTHROPIC_BASE_URL from settings-GLM.json when present (so the
+    endpoint tracks the Claude Code config), else the known Z.ai default.
+    """
+    base = _read_glm_settings().get("ANTHROPIC_BASE_URL") or _ZAI_ANTHROPIC_BASE
+    return base.rstrip("/") + "/v1/messages"
+
+
+def call_verifier(system_prompt: str | None, user_prompt: str,
+                  temperature: float = 0.2, timeout: int = 180) -> str:
+    """Call the independent verification model (GLM-5.1 via Z.ai by default).
+
+    Uses Z.ai's Anthropic-compatible Messages API — the same endpoint and
+    coding-plan subscription Claude Code uses — so it does not draw on prepaid
+    API credits. Retries once on transient errors; after the second failure,
+    raises RuntimeError so the caller can skip verification gracefully.
+    """
+    api_key = _resolve_zai_key()
+    if not api_key:
+        raise RuntimeError(
+            "Z.ai key not found (set ZAI_API_KEY or env.ANTHROPIC_AUTH_TOKEN "
+            f"in {_GLM_SETTINGS_PATH}) — verification unavailable"
+        )
+
+    url = _resolve_zai_messages_url()
+    body_payload = {
+        "model": _VERIFIER_MODEL,
+        "max_tokens": _VERIFIER_MAX_TOKENS,
+        "temperature": temperature,
+        "messages": [{"role": "user", "content": user_prompt}],
+    }
+    if system_prompt:
+        body_payload["system"] = system_prompt
+    payload = json.dumps(body_payload).encode("utf-8")
+
+    last_error = None
+    for attempt in range(2):  # original + 1 retry
+        req = urllib.request.Request(
+            url,
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": api_key,
+                "anthropic-version": _ZAI_ANTHROPIC_VERSION,
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+            # Anthropic Messages API: content is a list of typed blocks.
+            blocks = body.get("content") or []
+            text = "".join(
+                b.get("text", "") for b in blocks if b.get("type") == "text"
+            ).strip()
+            if text:
+                return text
+            last_error = f"Unexpected verifier response: {body}"
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8", errors="replace")
+            last_error = f"Verifier API error {e.code}: {err_body}"
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            last_error = f"Verifier connection error (attempt {attempt+1}): {e}"
+
+    raise RuntimeError(last_error or "Verifier failed after retry")
+
+
+def verification_available() -> bool:
+    """True if a Z.ai/GLM key can be resolved (env or settings-GLM.json)."""
+    return _resolve_zai_key() is not None
+
+
+# B1 verification prompt schema — see spec Appendix B1.
+VERIFICATION_SYSTEM_PROMPT = (
+    "You are a skeptical fact-checker. Compare the podcast script against "
+    "the evidence map. For each factual claim in the script (numbers, dates, "
+    "quotes, names), check if the evidence map supports it. Return ONLY a "
+    "JSON array with entries:\n"
+    "- claim: the specific text from the script\n"
+    '- confidence: "high" if clearly missing, "medium" if ambiguous\n'
+    '- type: one of "number", "date", "quote", "name", "unattributed_expert"\n'
+    "- reason: brief justification"
+)
+
+
+def verify_script(script_text: str, evidence: list[dict]) -> dict:
+    """Phase 8: verify a draft script against the evidence map.
+
+    Calls the independent verifier (a different model than the drafter, to
+    decorrelate errors) and returns a structured result:
+
+        {
+            "claims":          [ {claim, confidence, type, reason}, ... ],
+            "high_confidence": int,   # count of confidence == "high"
+            "threshold":       int,   # _VERIFICATION_THRESHOLD
+            "passed":          bool,  # high_confidence <= threshold
+        }
+
+    Raises RuntimeError if the verifier is unavailable (no key) or the API
+    fails after one retry, so callers can skip verification gracefully.
+    Raises ValueError if the verifier returns an unparseable report.
+    """
+    user_prompt = (
+        f"## Evidence Map\n{json.dumps(evidence, indent=2, ensure_ascii=False)}\n\n"
+        f"## Script\n{script_text}"
+    )
+
+    response = call_verifier(VERIFICATION_SYSTEM_PROMPT, user_prompt)
+
+    match = re.search(r"\[.*\]", response, re.DOTALL)
+    if not match:
+        # No JSON array at all — treat as "nothing flagged".
+        claims: list[dict] = []
+    else:
+        try:
+            parsed = json.loads(match.group(0))
+        except json.JSONDecodeError as e:
+            raise ValueError(
+                f"Verifier returned unparseable report "
+                f"(first 200 chars: {response[:200]})"
+            ) from e
+        claims = parsed if isinstance(parsed, list) else []
+
+    high_confidence = sum(1 for c in claims if c.get("confidence") == "high")
+    return {
+        "claims": claims,
+        "high_confidence": high_confidence,
+        "threshold": _VERIFICATION_THRESHOLD,
+        "passed": high_confidence <= _VERIFICATION_THRESHOLD,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Stage 1: Evidence extraction
 # ---------------------------------------------------------------------------
 
@@ -107,7 +293,16 @@ def extract_evidence(text: str) -> list[dict]:
             f"(received {len(text.split()) if text else 0} words, need ≥100)"
         )
 
-    prompt = f"Extract all evidence from the following text:\n\n{text[:8000]}"
+    # Safety cap: ~150k chars (~50k tokens, well within ~200K context).
+    # A 60-min transcript is ~15k words (~20k tokens) — fits ~10× in context.
+    _FULL_CONTEXT_CAP = 150_000
+    if len(text) > _FULL_CONTEXT_CAP:
+        dropped = len(text) - _FULL_CONTEXT_CAP
+        print(f"    WARNING: transcript truncated at {_FULL_CONTEXT_CAP:,} chars "
+              f"({dropped:,} chars dropped)")
+        text = text[:_FULL_CONTEXT_CAP]
+
+    prompt = f"Extract all evidence from the following text:\n\n{text}"
 
     response = _call_minimax(EXTRACTION_SYSTEM_PROMPT, prompt)
 

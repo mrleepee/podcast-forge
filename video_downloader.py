@@ -2312,6 +2312,9 @@ def _run_evidence_pipeline(summary_text, clean_name, podcast_path,
     except ImportError:
         print("    Opening check not available, skipping.")
 
+    # Stage 4c: Independent verification against evidence (Phase 8)
+    _run_verification_stage(en_narrative, evidence, en_txt)
+
     # Stage 5: Audio generation
     print("  Stage 5: Audio generation...")
     if not en_mp3.exists():
@@ -2348,6 +2351,73 @@ def _run_evidence_pipeline(summary_text, clean_name, podcast_path,
         pass  # non-critical
 
     return en_txt, en_mp3
+
+
+def _run_verification_stage(script_text: str, evidence: list[dict],
+                            script_path=None) -> dict | None:
+    """Phase 8: Run independent verification of the script against the evidence map.
+
+    Uses a different model than the drafter to decorrelate errors. Best-effort:
+    if the verifier is unavailable the stage is skipped with a warning and the
+    episode still produces. When a verification report is produced it is written
+    to ``<script>.verification_report.json`` alongside the script.
+
+    Returns the verification result dict (see ``verify_script``), or None when
+    the stage was skipped.
+    """
+    import json as _json
+    try:
+        from pipeline_stages import verify_script
+    except ImportError:
+        print("    Verification: pipeline_stages not available, skipping.")
+        return None
+
+    if not evidence:
+        print("    Verification: no evidence map, skipping.")
+        return None
+
+    try:
+        result = verify_script(script_text, evidence)
+    except RuntimeError as e:
+        print(f"    Verification: skipped ({e})")
+        return None
+    except ValueError as e:
+        print(f"    Verification: unparseable report, proceeding ({e})")
+        return None
+
+    claims = result["claims"]
+    high = result["high_confidence"]
+    threshold = result["threshold"]
+
+    for c in claims:
+        conf = c.get("confidence", "?")
+        ctype = c.get("type", "?")
+        claim_text = c.get("claim", "")[:60]
+        print(f"    ⚠️ Untraceable ({conf}/{ctype}): {claim_text}")
+
+    if not claims:
+        print("    Verification: all claims traceable ✓")
+    elif result["passed"]:
+        print(f"    Verification passed: {high} high-confidence "
+              f"untraceable claims (within threshold of {threshold})")
+    else:
+        print(f"    Verification FAILED: {high} high-confidence "
+              f"untraceable claims (threshold: {threshold}) "
+              f"— verification_failed: {high} untraceable claims")
+
+    # Persist the report next to the script for later inspection / QA.
+    if script_path is not None:
+        try:
+            report_path = Path(script_path).with_suffix(".verification_report.json")
+            report_path.write_text(
+                _json.dumps(result, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            print(f"    Verification report: {report_path.name}")
+        except OSError as e:
+            print(f"    Verification report not written: {e}")
+
+    return result
 
 
 def _run_qa_revision_loop(script_text, script_path, outline, evidence,
