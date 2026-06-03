@@ -79,15 +79,34 @@ def _call_minimax(system_prompt: str, user_prompt: str,
 # Verification client (Phase 7) — independent model for fact-checking
 # ---------------------------------------------------------------------------
 
-_ZAI_API_URL = "https://api.z.ai/api/paas/v4/chat/completions"
+# Z.ai exposes two APIs behind the same token:
+#   - /api/paas/v4/chat/completions (OpenAI-compatible) — billed against a
+#     prepaid API balance.
+#   - /api/anthropic (Anthropic Messages API) — covered by the GLM Coding Plan
+#     subscription, which is how Claude Code uses GLM without per-token credits.
+# We use the Anthropic-compatible endpoint so verification runs on the same
+# subscription as Claude Code (no API top-up required).
+_ZAI_ANTHROPIC_BASE = "https://api.z.ai/api/anthropic"
+_ZAI_ANTHROPIC_VERSION = "2023-06-01"
 _VERIFIER_MODEL = os.environ.get("VERIFIER_MODEL", "glm-5.1")
+_VERIFIER_MAX_TOKENS = int(os.environ.get("VERIFIER_MAX_TOKENS", "8192"))
 
 # Maximum high-confidence untraceable claims before QA fails.
 _VERIFICATION_THRESHOLD = int(os.environ.get("VERIFICATION_THRESHOLD", "3"))
 
-# Fallback key location: the Z.ai token also lives in the Claude Code GLM
-# settings profile as env.ANTHROPIC_AUTH_TOKEN (an OpenAI-compatible Z.ai key).
+# Fallback key location: the Z.ai token lives in the Claude Code GLM settings
+# profile as env.ANTHROPIC_AUTH_TOKEN, alongside the coding-plan base URL.
 _GLM_SETTINGS_PATH = Path.home() / ".claude" / "settings-GLM.json"
+
+
+def _read_glm_settings() -> dict:
+    """Return the env block of ~/.claude/settings-GLM.json (empty on failure)."""
+    try:
+        settings = json.loads(_GLM_SETTINGS_PATH.read_text(encoding="utf-8"))
+        env = settings.get("env", {})
+        return env if isinstance(env, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
 
 
 def _resolve_zai_key() -> str | None:
@@ -101,24 +120,32 @@ def _resolve_zai_key() -> str | None:
     Resolved at call time (not import) so the key can be provided after import.
     """
     key = os.environ.get("ZAI_API_KEY")
-    if key:
+    if key and key.strip():
         return key.strip()
-    try:
-        settings = json.loads(_GLM_SETTINGS_PATH.read_text(encoding="utf-8"))
-        token = settings.get("env", {}).get("ANTHROPIC_AUTH_TOKEN")
-        if token and token.strip():
-            return token.strip()
-    except (OSError, json.JSONDecodeError):
-        pass
+    token = _read_glm_settings().get("ANTHROPIC_AUTH_TOKEN")
+    if token and token.strip():
+        return token.strip()
     return None
+
+
+def _resolve_zai_messages_url() -> str:
+    """Resolve the Anthropic-compatible /v1/messages URL.
+
+    Honours ANTHROPIC_BASE_URL from settings-GLM.json when present (so the
+    endpoint tracks the Claude Code config), else the known Z.ai default.
+    """
+    base = _read_glm_settings().get("ANTHROPIC_BASE_URL") or _ZAI_ANTHROPIC_BASE
+    return base.rstrip("/") + "/v1/messages"
 
 
 def call_verifier(system_prompt: str | None, user_prompt: str,
                   temperature: float = 0.2, timeout: int = 180) -> str:
     """Call the independent verification model (GLM-5.1 via Z.ai by default).
 
-    Retries once on transient errors; after the second failure, raises
-    RuntimeError so the caller can skip verification gracefully.
+    Uses Z.ai's Anthropic-compatible Messages API — the same endpoint and
+    coding-plan subscription Claude Code uses — so it does not draw on prepaid
+    API credits. Retries once on transient errors; after the second failure,
+    raises RuntimeError so the caller can skip verification gracefully.
     """
     api_key = _resolve_zai_key()
     if not api_key:
@@ -127,33 +154,38 @@ def call_verifier(system_prompt: str | None, user_prompt: str,
             f"in {_GLM_SETTINGS_PATH}) — verification unavailable"
         )
 
-    messages = []
-    if system_prompt:
-        messages.append({"role": "system", "content": system_prompt})
-    messages.append({"role": "user", "content": user_prompt})
-
-    payload = json.dumps({
+    url = _resolve_zai_messages_url()
+    body_payload = {
         "model": _VERIFIER_MODEL,
-        "messages": messages,
+        "max_tokens": _VERIFIER_MAX_TOKENS,
         "temperature": temperature,
-    }).encode("utf-8")
+        "messages": [{"role": "user", "content": user_prompt}],
+    }
+    if system_prompt:
+        body_payload["system"] = system_prompt
+    payload = json.dumps(body_payload).encode("utf-8")
 
     last_error = None
     for attempt in range(2):  # original + 1 retry
         req = urllib.request.Request(
-            _ZAI_API_URL,
+            url,
             data=payload,
             headers={
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}",
+                "x-api-key": api_key,
+                "anthropic-version": _ZAI_ANTHROPIC_VERSION,
             },
         )
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 body = json.loads(resp.read().decode("utf-8"))
-            choices = body.get("choices") or []
-            if choices:
-                return choices[0].get("message", {}).get("content", "").strip()
+            # Anthropic Messages API: content is a list of typed blocks.
+            blocks = body.get("content") or []
+            text = "".join(
+                b.get("text", "") for b in blocks if b.get("type") == "text"
+            ).strip()
+            if text:
+                return text
             last_error = f"Unexpected verifier response: {body}"
         except urllib.error.HTTPError as e:
             err_body = e.read().decode("utf-8", errors="replace")

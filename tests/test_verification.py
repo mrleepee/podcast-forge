@@ -301,5 +301,28 @@ class TestVerificationStageWiring:
         assert json.loads(report.read_text())["high_confidence"] == 1
 
 
+class TestLiveVerifier:
+    """Opt-in live check against Z.ai's coding-plan endpoint (no API credits).
+
+    Skipped unless RUN_LIVE_GLM=1 — keeps the default suite offline and stable.
+    """
+
+    def test_live_flags_unattributed_expert(self):
+        import os
+        if os.environ.get("RUN_LIVE_GLM") != "1":
+            pytest.skip("set RUN_LIVE_GLM=1 to run the live GLM verifier check")
+        import pipeline_stages
+        if not pipeline_stages.verification_available():
+            pytest.skip("no Z.ai key resolvable")
+        evidence = [{"claim": "90 countries piloting CBDCs",
+                     "source_quote": "90 countries piloting CBDCs", "timestamp": "para:0",
+                     "source_reliability": "primary", "confidence": "high",
+                     "type": "statistic"}]
+        script = "In 2024, 90 countries piloted CBDCs, and experts say adoption is inevitable."
+        result = pipeline_stages.verify_script(script, evidence)
+        # The vague-attribution claim has no support in the evidence map.
+        assert any(c.get("type") == "unattributed_expert" for c in result["claims"])
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
