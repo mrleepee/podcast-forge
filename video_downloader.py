@@ -2323,20 +2323,8 @@ def _run_evidence_pipeline(summary_text, clean_name, podcast_path,
             raise PipelineStageError("audio_generation",
                 "Kokoro synthesis failed", str(en_txt))
 
-    # Splice intro/outro before mastering
-    if _splice_intro_outro(en_mp3):
-        print("    Intro/outro added")
-
-    # Master audio to broadcast loudness
-    try:
-        from checks.master_audio import master
-        result = master(str(en_mp3))
-        if result.get("normalised"):
-            print(f"    Mastered: {en_mp3.name} ({result.get('integrated_lufs')} LUFS)")
-        else:
-            print(f"    Audio already in range: {en_mp3.name}")
-    except Exception as e:
-        print(f"    Mastering skipped: {e}")
+    # Intro/outro and mastering are handled by the caller (produce_podcast)
+    # to avoid double-splicing. Do NOT splice here.
 
     print(f"  Evidence-first pipeline complete: {en_mp3.name}")
 
