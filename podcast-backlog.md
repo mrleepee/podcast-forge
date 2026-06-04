@@ -22,20 +22,14 @@
 - ep116 — Zero Trust for AI Agents — Anthropic Security Framework
 - ep117 — OpenHands — Open Source AI Software Engineer
 - ep118 — Liberland 2026 Master Plan
+- ep121 — Karpathy: 90% of What AI Twitter Tells You to Learn Will Be Dead in 6 Months
 
 ## Pending Episodes (alternating subjects)
 
 Categories: 🤖 AI · 🏠 Nomad · 🏛️ Libertarian · 💰 Finance · 🎥 Video
 Liberland episodes spaced with 4 non-Liberland between each.
 
-1. 🤖 **Karpathy: "90% of What AI Twitter Tells You to Learn Will Be Dead in 6 Months"**
-   - Category: AI
-   - Source: https://x.com/i/status/2061491256107159736
-   - Type: URL-based
-   - Flags: default (~5 min)
-   - Notes: 0xMorty amplifying an Andrej Karpathy quote — 90% of trending "must-learn" AI tooling dies within 6 months, and senior engineers have already stopped chasing it. The "dead list": AutoGen, CrewAI, autonomous-agent pitches, agent marketplaces, benchmark-chasing. Argument: durable fundamentals beat framework hype churn. Connects to ep100 (dynamic workflows), ep111 (build a system that prompts itself), ep113 (AI layoff trap). Señora Freedom angle: who profits from manufacturing the hype cycle you feel obligated to chase?
-
-2. 🏠 **Izmir Neighborhood Guide: Where to Actually Buy**
+1. 🏠 **Izmir Neighborhood Guide: Where to Actually Buy**
    - Source: Research-based (continuation of ep05)
    - Type: Topic/research-based
    - Flags: default (~5 min)
