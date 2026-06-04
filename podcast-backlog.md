@@ -23,44 +23,40 @@
 - ep117 — OpenHands — Open Source AI Software Engineer
 - ep118 — Liberland 2026 Master Plan
 - ep121 — Karpathy: 90% of What AI Twitter Tells You to Learn Will Be Dead in 6 Months
+- ep123 — Izmir Neighborhood Guide: Where to Actually Buy
 
 ## Pending Episodes (alternating subjects)
 
 Categories: 🤖 AI · 🏠 Nomad · 🏛️ Libertarian · 💰 Finance · 🎥 Video
 Liberland episodes spaced with 4 non-Liberland between each.
 
-1. 🏠 **Izmir Neighborhood Guide: Where to Actually Buy**
-   - Source: Research-based (continuation of ep05)
-   - Type: Topic/research-based
-   - Flags: default (~5 min)
-
-3. 🤖 **Closing Claude Code's Feedback Loop — Self-Checking Before Handoff**
+1. 🤖 **Closing Claude Code's Feedback Loop — Self-Checking Before Handoff**
    - Category: AI
    - Source: https://x.com/i/status/2061900434722496604
    - Type: URL-based
    - Flags: default (~5 min)
    - Notes: ClaudeDevs (Anthropic's Claude Code account) demo on getting Claude Code to check its own work before handing it back — encoding your manual review checks so Claude closes its own feedback loop (self-verification, automated QA gates). Connects to ep111 (build a system that prompts itself), ep115 (session management), and the evidence-first pipeline's own QA loop. Señora Freedom angle: if the agent grades its own homework, who sets the rubric?
 
-4. 🏠 **Istanbul Real Estate: Renovation Costs and ROI for Turkish CBI**
+2. 🏠 **Istanbul Real Estate: Renovation Costs and ROI for Turkish CBI**
    - Source: https://www.youtube.com/watch?v=N-qCy1CCcpY
    - Type: URL-based
    - Flags: default (~5 min)
    - Notes: Investment analysis for Istanbul real estate targeting Turkish citizenship-by-investment (CBI). Covers renovation costs, ROI calculations, and practical considerations. **Format note: should be generalized advice (first-person or dialogue), not a case study of one specific property.**
 
-5. 🤖 **Beyond the Basics with Claude Code: Systems That Prompt Themselves**
+3. 🤖 **Beyond the Basics with Claude Code: Systems That Prompt Themselves**
    - Source: https://x.com/i/status/2061821319034143172
    - Type: URL-based
    - Flags: default (~5 min)
    - Notes: Khairallah AL-Awady (Anthropic engineer) breaks down the advanced Claude Code workflow: "You're not supposed to prompt Claude. You're supposed to build a system that prompts itself." Covers the mistake most users make (direct prompting vs building agentic workflows) and the performance cost of getting it wrong. Connects to ep111 (build a system that prompts itself), ep115 (session management), and the new verification pipeline — the system checks itself before you see it. Señora Freedom angle: when the agent grades its own homework, who controls the rubric?
 
-6. 🤖 **Boris Cherny: Why Most People Aren't Getting Real Results from Claude Code**
+4. 🤖 **Boris Cherny: Why Most People Aren't Getting Real Results from Claude Code**
    - Category: AI
    - Source: https://x.com/i/status/2062184732075741349
    - Type: URL-based
    - Flags: `--long` (~10 min)
    - Notes: Boris Cherny is the creator of Claude Code at Anthropic. In this interview he explains exactly how most people never actually set up Claude properly. Must hit his key points as a near-bullet list: (1) the 14% of context window you lose to CLAUDE.md before typing a word — understand the cost and design for it, (2) the memory system that eliminates repeating yourself every conversation, (3) the custom instructions most users leave completely blank, (4) the project settings that give Claude permanent context about your work. Cherny argues that anyone using Claude for more than a month without leaving the chat window has at least 30 untouched features. This is Boris Cherny — recognise his role as the creator/architect of Claude Code. Connects to ep115 (session management), ep111 (systems that prompt themselves), ep100 (dynamic workflows). Señora Freedom angle: the tool is free — the setup tax is attention, and most people won't pay it.
 
-7. 🤖 **Anthropic's Own Data Stack: 95% Self-Service Analytics with Claude**
+5. 🤖 **Anthropic's Own Data Stack: 95% Self-Service Analytics with Claude**
    - Category: AI
    - Source: https://claude.com/blog/how-anthropic-enables-self-service-data-analytics-with-claude
    - Type: URL-based
