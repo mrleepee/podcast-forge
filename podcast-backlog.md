@@ -76,3 +76,10 @@ Liberland episodes spaced with 4 non-Liberland between each.
    - Type: URL-based
    - Flags: default (~5 min)
    - Notes: Instagram reel from @themaxdose covering the frontier of longevity/aging research and autoimmune disease cures. Cited research in the comments. Health and longevity science angle for the podcast.
+
+8. 🏛️ **Bezrukov at SPIEF: "Accept That War Is the New Normal"**
+   - Category: Libertarian
+   - Source: https://x.com/STANISKRAPIVNIK/status/2062549390909170079
+   - Type: URL-based
+   - Flags: `--long` (~10 min)
+   - Notes: Stanislav Krapivnik shares key theses from Andrey Bezrukov (former SVR intelligence officer, exposed as Russian illegal "Donald Heathfield" in 2010) speaking at St. Petersburg International Economic Forum (Jun 2026, 77K views). Bezrukov argues: (1) Russia is in a "new type of war" — attrition and subversion targeting leaders, infrastructure, scientists, not territory, (2) West pursuing "boiling frog" strategy to avoid nuclear clash while gradually escalating, (3) "We're on the first hill of world war" — next major clash likely in Asia, (4) enemy aims to neutralise Russian nuclear forces via space-based systems or agent-planted strikes like "Operation Spider Web", (5) biowar threat from labs around Russia's borders, (6) economy must serve both development and defence for "a couple of decades", (7) "Stop being good — too many red lines remain on paper." **Fact-check thoroughly**: verify Bezrukov's identity and background (SVR colonel, arrested in US 2010 as part of Illegals Program, deported in spy swap), verify SPIEF 2026 context, cross-reference claims about "Operation Spider Web" and biolab allegations against known sources. Connects to ep90 (Liberland meritocracy), ep97 (Liberland para-state). Señora Freedom angle: when both sides claim existential threat, who pays the price?
