@@ -10,6 +10,8 @@
 - ep102 — Liberland, AI and Global Government
 - ep103 — The Unreasonable Effectiveness of HTML for AI Agents
 - ep104 — Uganda Real Estate Investment for Foreigners
+<<<<<<< HEAD
+=======
 - ep105 — Robinhood Is Now Open to Agents
 - ep107 — The History of Taxation: From Ancient Tribute to Modern Certainty
 - ep108 — Karpathy's LLM Wiki: Build Your Own Knowledge Base
@@ -24,12 +26,31 @@
 - ep118 — Liberland 2026 Master Plan
 - ep121 — Karpathy: 90% of What AI Twitter Tells You to Learn Will Be Dead in 6 Months
 - ep123 — Izmir Neighborhood Guide: Where to Actually Buy
+>>>>>>> origin/main
 
 ## Pending Episodes (alternating subjects)
 
 Categories: 🤖 AI · 🏠 Nomad · 🏛️ Libertarian · 💰 Finance · 🎥 Video
 Liberland episodes spaced with 4 non-Liberland between each.
 
+<<<<<<< HEAD
+1. 🤖 **OpenHands — Open Source AI Software Engineer**
+   - Category: AI
+   - Source: https://github.com/OpenHands/OpenHands
+   - Type: Topic/research-based
+   - Flags: `--long` (~10 min)
+   - Notes: Deep dive into the open-source autonomous coding agent
+
+2. 🏛️ **The History of Taxation: From Ancient Tribute to Modern Certainty**
+   - Category: Libertarian
+   - Type: Topic/research-based
+   - Flags: `--long` (~10 min)
+   - Notes: Trace taxation from ancient Egypt/Rome through medieval tithes to modern income tax. Challenge the premise — is there a genuine legal basis, or was it war-driven expedience that became permanent? Cover: ancient grain tributes, Roman tax farmers, medieval tallage, the window tax, how WWI income tax became permanent, the "temporary" taxes that never expired. Señor Freedom skeptical angle — question whether consent was ever given.
+
+3. 🎥 **X/Twitter video (non-English — needs translation)**
+   - Category: Video
+   - Source: https://x.com/i/status/2059642019706699840
+=======
 1. 🏛️ **A Day in the Life of Alex in AnCapville**
    - Category: Libertarian
    - Source: https://hamannature.substack.com/p/a-day-in-the-life-of-alex-in-ancapville
@@ -40,16 +61,52 @@ Liberland episodes spaced with 4 non-Liberland between each.
 2. 🤖 **Closing Claude Code's Feedback Loop — Self-Checking Before Handoff**
    - Category: AI
    - Source: https://x.com/i/status/2061900434722496604
+>>>>>>> origin/main
    - Type: URL-based
    - Flags: default (~5 min)
    - Notes: ClaudeDevs (Anthropic's Claude Code account) demo on getting Claude Code to check its own work before handing it back — encoding your manual review checks so Claude closes its own feedback loop (self-verification, automated QA gates). Connects to ep111 (build a system that prompts itself), ep115 (session management), and the evidence-first pipeline's own QA loop. Señora Freedom angle: if the agent grades its own homework, who sets the rubric?
 
+<<<<<<< HEAD
+4. 💰 **Robinhood Is Now Open to Agents**
+   - Category: Finance
+   - Source: https://robinhood.com/us/en/newsroom/robinhood-is-now-open-to-agents/
+   - Type: Topic/research-based
+   - Flags: default (~5 min)
+   - Notes: Robinhood opens API access to AI agents for trading — implications for autonomous finance, agentic payments, and the intersection of AI and financial markets
+
+5. 🤖 **AI Made Us Faster. That Was the Problem** — David Fowler (Aspire/.NET)
+   - Category: AI
+   - Source: https://www.linkedin.com/pulse/ai-made-us-faster-problem-david-fowler-mgnzc/
+   - Type: Topic/research-based
+   - Flags: default (~5 min)
+   - Notes: Real-world lessons from the Aspire team going AI-first — production got cheaper but maintenance didn't, experienced engineers feel regression, agent-readiness as codebase health, the bottleneck moves but doesn't disappear
+
+6. 🎥 **X/Twitter video — @trq212**
+   - Category: Video
+   - Source: https://x.com/trq212/status/2044548257058328723
+=======
 3. 🏠 **Istanbul Real Estate: Renovation Costs and ROI for Turkish CBI**
    - Source: https://www.youtube.com/watch?v=N-qCy1CCcpY
+>>>>>>> origin/main
    - Type: URL-based
    - Flags: default (~5 min)
    - Notes: Investment analysis for Istanbul real estate targeting Turkish citizenship-by-investment (CBI). Covers renovation costs, ROI calculations, and practical considerations. **Format note: should be generalized advice (first-person or dialogue), not a case study of one specific property.**
 
+<<<<<<< HEAD
+7. 🎥 **X/Twitter video**
+   - Category: Video
+   - Source: https://x.com/i/status/2058960634650226976
+   - Type: URL-based
+   - Flags: default (~5 min)
+
+8. *(gap)*
+
+9. 🏛️ **Liberland 2026 Master Plan**
+   - Category: Libertarian
+   - Source: `/Users/lpollington/Dev/VitBot/text/Liberland's 2026 Master Plan 📜🌍 ｜ New Year Speech.txt`
+   - Type: Topic/research-based
+   - Flags: default (~5 min)
+=======
 4. 🤖 **Beyond the Basics with Claude Code: Systems That Prompt Themselves**
    - Source: https://x.com/i/status/2061821319034143172
    - Type: URL-based
@@ -83,3 +140,4 @@ Liberland episodes spaced with 4 non-Liberland between each.
    - Type: URL-based
    - Flags: `--long` (~10 min)
    - Notes: Stanislav Krapivnik shares key theses from Andrey Bezrukov (former SVR intelligence officer, exposed as Russian illegal "Donald Heathfield" in 2010) speaking at St. Petersburg International Economic Forum (Jun 2026, 77K views). Bezrukov argues: (1) Russia is in a "new type of war" — attrition and subversion targeting leaders, infrastructure, scientists, not territory, (2) West pursuing "boiling frog" strategy to avoid nuclear clash while gradually escalating, (3) "We're on the first hill of world war" — next major clash likely in Asia, (4) enemy aims to neutralise Russian nuclear forces via space-based systems or agent-planted strikes like "Operation Spider Web", (5) biowar threat from labs around Russia's borders, (6) economy must serve both development and defence for "a couple of decades", (7) "Stop being good — too many red lines remain on paper." **Fact-check thoroughly**: verify Bezrukov's identity and background (SVR colonel, arrested in US 2010 as part of Illegals Program, deported in spy swap), verify SPIEF 2026 context, cross-reference claims about "Operation Spider Web" and biolab allegations against known sources. Connects to ep90 (Liberland meritocracy), ep97 (Liberland para-state). Señora Freedom angle: when both sides claim existential threat, who pays the price?
+>>>>>>> origin/main
