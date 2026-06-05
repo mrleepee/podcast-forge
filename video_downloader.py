@@ -1465,6 +1465,45 @@ _BRITISH_VOICES = [
 
 _SPANISH_VOICES = ["ef_dora", "em_alex", "em_santa"]
 
+# --- OmniVoice TTS (default engine; set TTS_ENGINE=kokoro to fall back) ---
+# The worker runs under OmniVoice's own venv (heavy deps isolated from this one).
+_OMNIVOICE_PY = os.environ.get(
+    "OMNIVOICE_PY",
+    str(Path.home() / "Dev" / "OmniVoice-Studio" / ".venv" / "bin" / "python"),
+)
+_OMNIVOICE_WORKER = str(Path(__file__).resolve().parent / "tts_omnivoice.py")
+_OMNIVOICE_MODEL = os.environ.get("OMNIVOICE_MODEL", "k2-fsa/OmniVoice")
+# Voice-design instructions. Accents are English-only in OmniVoice, so Spanish
+# uses a plain female voice. _B variants give the second speaker in duo mode a
+# distinct timbre. (ref_audio voice-cloning is the planned upgrade — not wired yet.)
+# Speech pace. 0.85 matches the old Kokoro cadence (which ran ~0.85 effective).
+_OMNI_SPEED = float(os.environ.get("OMNIVOICE_SPEED", "0.9"))
+_OMNI_INSTRUCT_EN = "female, british accent, young adult"
+_OMNI_INSTRUCT_EN_B = "male, british accent, young adult"
+_OMNI_INSTRUCT_ES = "female, young adult"
+_OMNI_INSTRUCT_ES_B = "male, young adult"
+
+# Locked podcast voice: when this reference clip exists, OmniVoice clones it
+# (consistent timbre across episodes + both languages) instead of using instruct.
+# Override/disable via OMNIVOICE_REF_AUDIO env ("" disables → instruct mode).
+_OMNI_REF_DEFAULT = str(Path(__file__).resolve().parent / "voice_ref" / "senora_freedom_en_ref.wav")
+_OMNI_REF_AUDIO = os.environ.get("OMNIVOICE_REF_AUDIO", _OMNI_REF_DEFAULT)
+if _OMNI_REF_AUDIO and not Path(_OMNI_REF_AUDIO).exists():
+    _OMNI_REF_AUDIO = ""  # fall back to instruct mode if the clip is missing
+# Explicit transcript of the reference clip. REQUIRED for clean cloning: without
+# it OmniVoice auto-transcribes + trims the clip, misaligning audio/text and
+# echoing reference fragments (e.g. a stray "fresh") into every chunk.
+_OMNI_REF_TEXT = ""
+if _OMNI_REF_AUDIO:
+    _ref_txt_path = Path(_OMNI_REF_AUDIO).with_suffix(".txt")
+    if _ref_txt_path.exists():
+        _OMNI_REF_TEXT = _ref_txt_path.read_text().strip()
+
+
+def _use_omnivoice() -> bool:
+    """OmniVoice is the default engine; TTS_ENGINE=kokoro selects the legacy path."""
+    return os.environ.get("TTS_ENGINE", "omnivoice").lower() != "kokoro"
+
 
 def _parse_dialogue(text):
     """Parse duo narration text into list of (speaker, text) tuples.
@@ -1483,8 +1522,215 @@ def _parse_dialogue(text):
     return segments
 
 
+def _chunk_text(text, max_chars=600):
+    """Split text into sentence-grouped chunks of at most ~max_chars.
+
+    Keeps each OmniVoice generate() call bounded (long single calls degrade the
+    model's duration estimate) while preserving sentence boundaries for prosody.
+    """
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    chunks, cur = [], ""
+    for s in sentences:
+        s = s.strip()
+        if not s:
+            continue
+        if cur and len(cur) + 1 + len(s) > max_chars:
+            chunks.append(cur)
+            cur = s
+        else:
+            cur = f"{cur} {s}".strip()
+    if cur:
+        chunks.append(cur)
+    return chunks
+
+
+# Literal pre-TTS fixups for the OmniVoice path (engine reads these better than
+# the raw form). Grow empirically from verification listen-throughs.
+_OMNI_TEXT_FIXUPS = [
+    ("tmux", "tee-mux"),
+]
+
+
+def _omnivoice_fixups(text):
+    for needle, repl in _OMNI_TEXT_FIXUPS:
+        text = re.sub(rf'\b{re.escape(needle)}\b', repl, text)
+    return text
+
+
+# Intro/outro assets — prepended/appended to every episode before mastering.
+_INTRO_AUDIO = Path(__file__).resolve().parent / "assets" / "intro.mp3"
+_OUTRO_AUDIO = Path(__file__).resolve().parent / "assets" / "outro.mp3"
+
+
+def _splice_intro_outro(mp3_path: str | Path) -> bool:
+    """Prepend intro.mp3 and append outro.mp3 to a podcast MP3. Returns True on success."""
+    mp3_path = Path(mp3_path)
+    if not _INTRO_AUDIO.exists() or not _OUTRO_AUDIO.exists():
+        return False
+    tmp = mp3_path.with_suffix(".stitched.mp3")
+    # ffmpeg concat demuxer — re-encodes once for consistent format
+    concat_list = tmp.with_suffix(".txt")
+    concat_list.write_text(
+        f"file '{_INTRO_AUDIO}'\nfile '{mp3_path}'\nfile '{_OUTRO_AUDIO}'\n"
+    )
+    r = subprocess.run(
+        ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(concat_list),
+         "-codec:a", "libmp3lame", "-qscale:a", "2", str(tmp)],
+        capture_output=True, text=True,
+    )
+    concat_list.unlink(missing_ok=True)
+    if r.returncode != 0:
+        print(f"  Intro/outro splice failed: {r.stderr[-200:]}")
+        tmp.unlink(missing_ok=True)
+        return False
+    subprocess.run(["mv", str(tmp), str(mp3_path)], check=True)
+    return True
+
+
+def _omnivoice_render(segments, output_mp3_path, *, silence_sec=0.12):
+    """Render pre-built segments via the OmniVoice worker subprocess → MP3.
+
+    segments: list of {"text", "language" ("English"|"Spanish"), "instruct"?}.
+    Loads the model once in the worker, concatenates the per-segment WAVs with a
+    short gap, then reuses the same libmp3lame encode as the Kokoro path. Returns bool.
+    """
+    import tempfile
+    import soundfile as sf
+    import numpy as np
+
+    segments = [s for s in segments if s.get("text", "").strip()]
+    if not segments:
+        print("  OmniVoice: no segments to render.")
+        return False
+
+    tmpdir = tempfile.mkdtemp(prefix="omnivoice_")
+    try:
+        job_segments = []
+        for i, seg in enumerate(segments):
+            entry = {
+                "text": seg["text"],
+                "language": seg["language"],
+                "out_wav": os.path.join(tmpdir, f"seg{i:03d}.wav"),
+            }
+            if seg.get("instruct"):
+                entry["instruct"] = seg["instruct"]
+            job_segments.append(entry)
+
+        job = {
+            "model": _OMNIVOICE_MODEL,
+            "instruct_en": _OMNI_INSTRUCT_EN,
+            "instruct_es": _OMNI_INSTRUCT_ES,
+            "speed": _OMNI_SPEED,
+            "segments": job_segments,
+        }
+        if _OMNI_REF_AUDIO:
+            # Voice-clone mode: locked timbre overrides instruct for all segments.
+            job["ref_audio"] = _OMNI_REF_AUDIO
+            if _OMNI_REF_TEXT:
+                job["ref_text"] = _OMNI_REF_TEXT
+        job_path = os.path.join(tmpdir, "job.json")
+        with open(job_path, "w") as fh:
+            json.dump(job, fh)
+
+        print(f"  OmniVoice: rendering {len(job_segments)} segment(s)...")
+        proc = subprocess.run(
+            [_OMNIVOICE_PY, _OMNIVOICE_WORKER, job_path],
+            capture_output=True, text=True,
+        )
+        if proc.returncode != 0:
+            print(f"  OmniVoice worker failed (rc={proc.returncode}): {proc.stderr.strip()[-500:]}")
+            return False
+        try:
+            status = json.loads(proc.stdout.strip().splitlines()[-1])
+        except Exception as e:
+            print(f"  OmniVoice: unparseable worker output: {e}\n{proc.stdout[-300:]}")
+            return False
+        if not status.get("ok"):
+            print(f"  OmniVoice worker error: {status.get('error')}")
+            return False
+
+        sr = status.get("sample_rate", 24000)
+        silence = np.zeros(int(silence_sec * sr))
+        parts = []
+        multi = len(job_segments) > 1
+        for seg in job_segments:
+            wav, _ = sf.read(seg["out_wav"])
+            if wav.ndim > 1:
+                wav = wav.mean(axis=1)
+            parts.append(wav)
+            if multi:
+                parts.append(silence)
+        full = np.concatenate(parts)
+        duration = len(full) / sr
+
+        wav_path = str(output_mp3_path).rsplit(".", 1)[0] + ".tmp.wav"
+        sf.write(wav_path, full, sr)
+        cmd = ["ffmpeg", "-y", "-i", wav_path,
+               "-codec:a", "libmp3lame", "-qscale:a", "2", str(output_mp3_path)]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        Path(wav_path).unlink(missing_ok=True)
+        if result.returncode != 0:
+            print(f"  ffmpeg error: {result.stderr.strip()}")
+            return False
+
+        size_mb = Path(output_mp3_path).stat().st_size / (1024 * 1024)
+        print(f"  OmniVoice MP3 saved: {output_mp3_path} ({size_mb:.1f}MB, {duration/60:.1f}min)")
+        return True
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def _generate_omnivoice_audio(narrative_text, output_mp3_path, lang="en", mode="solo"):
+    """OmniVoice replacement for the Kokoro generators (solo/duo/bilingual)."""
+    lang_name = "Spanish" if lang == "es" else "English"
+
+    if mode == "bilingual":
+        segs = []
+        for line in narrative_text.strip().splitlines():
+            line = line.strip()
+            if line.startswith("ES:"):
+                for ch in _chunk_text(line[3:].strip()):
+                    segs.append({"text": ch, "language": "Spanish"})
+            elif line.startswith("EN:"):
+                for ch in _chunk_text(_omnivoice_fixups(line[3:].strip())):
+                    segs.append({"text": ch, "language": "English"})
+        if not segs:
+            print("  No ES:/EN: lines found in bilingual text.")
+            return False
+        return _omnivoice_render(segs, output_mp3_path)
+
+    if mode == "duo":
+        parsed = _parse_dialogue(narrative_text)
+        if len(parsed) < 3:
+            return _generate_omnivoice_audio(narrative_text, output_mp3_path, lang=lang, mode="solo")
+        seen = []
+        for spk, _ in parsed:
+            if spk not in seen:
+                seen.append(spk)
+        speaker_a = seen[0]
+        instruct_a = _OMNI_INSTRUCT_ES if lang == "es" else _OMNI_INSTRUCT_EN
+        instruct_b = _OMNI_INSTRUCT_ES_B if lang == "es" else _OMNI_INSTRUCT_EN_B
+        segs = []
+        for spk, text in parsed:
+            if lang != "es":
+                text = _omnivoice_fixups(text)
+            instruct = instruct_a if spk == speaker_a else instruct_b
+            for ch in _chunk_text(text):
+                segs.append({"text": ch, "language": lang_name, "instruct": instruct})
+        print(f"  OmniVoice duo: {len(parsed)} turns, speaker_a={speaker_a}")
+        return _omnivoice_render(segs, output_mp3_path)
+
+    # solo
+    text = narrative_text if lang == "es" else _omnivoice_fixups(narrative_text)
+    segs = [{"text": ch, "language": lang_name} for ch in _chunk_text(text)]
+    return _omnivoice_render(segs, output_mp3_path)
+
+
 def _generate_duo_audio(narrative_text, output_mp3_path, lang="en"):
     """Generate two-speaker podcast audio with distinct voices per speaker."""
+    if _use_omnivoice():
+        return _generate_omnivoice_audio(narrative_text, output_mp3_path, lang=lang, mode="duo")
+
     from kokoro import KPipeline
     import soundfile as sf
     import numpy as np
@@ -1573,6 +1819,9 @@ def _generate_duo_audio(narrative_text, output_mp3_path, lang="en"):
 
 def _generate_bilingual_audio(narrative_text, output_mp3_path):
     """Generate bilingual podcast audio: ES lines in Spanish voice, EN lines in English voice."""
+    if _use_omnivoice():
+        return _generate_omnivoice_audio(narrative_text, output_mp3_path, mode="bilingual")
+
     from kokoro import KPipeline
     import soundfile as sf
     import numpy as np
@@ -1671,6 +1920,9 @@ def _prepare_pronunciation(text: str):
 
 def _generate_podcast_audio(narrative_text, output_mp3_path, lang="en"):
     """Generate podcast audio using Kokoro TTS and convert to MP3."""
+    if _use_omnivoice():
+        return _generate_omnivoice_audio(narrative_text, output_mp3_path, lang=lang, mode="solo")
+
     from kokoro import KPipeline
     import soundfile as sf
     import numpy as np
@@ -1962,6 +2214,243 @@ def _next_episode_number(podcast_dir=None):
     return highest + 1
 
 
+# ---------------------------------------------------------------------------
+# Evidence-first pipeline
+# ---------------------------------------------------------------------------
+
+class PipelineStageError(Exception):
+    """Raised when an evidence-first pipeline stage fails."""
+    def __init__(self, stage, message, artifact_path=None):
+        self.stage = stage
+        self.artifact_path = artifact_path
+        super().__init__(f"{stage}: {message}")
+
+
+def _run_evidence_pipeline(summary_text, clean_name, podcast_path,
+                           video_title="", extra_prompt="", target_words=700, duo=False):
+    """Run the evidence-first pipeline: evidence → outline → script → QA → audio.
+
+    Returns (en_txt_path, en_mp3_path) on success.
+    Raises PipelineStageError on stage failure.
+    """
+    import json as _json
+
+    artifacts_dir = podcast_path / clean_name
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    # Stage 1: Evidence extraction
+    print("  Stage 1: Extracting evidence...")
+    evidence_path = artifacts_dir / "evidence_map.json"
+    if evidence_path.exists():
+        print(f"    Evidence map exists: {evidence_path.name}")
+        evidence = _json.loads(evidence_path.read_text(encoding="utf-8"))
+    else:
+        from pipeline_stages import extract_evidence
+        evidence = extract_evidence(summary_text)
+        evidence_path.write_text(_json.dumps(evidence, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"    Extracted {len(evidence)} evidence entries → {evidence_path.name}")
+
+    if not evidence:
+        raise PipelineStageError("evidence_extraction",
+            "no evidence extracted from source material", str(evidence_path))
+
+    # Stage 2: Outline generation
+    print("  Stage 2: Generating outline...")
+    outline_path = artifacts_dir / "outline.json"
+    if outline_path.exists():
+        print(f"    Outline exists: {outline_path.name}")
+        outline = _json.loads(outline_path.read_text(encoding="utf-8"))
+    else:
+        from pipeline_stages import generate_outline
+        soul_path = Path(__file__).parent / "SOUL.md"
+        soul_text = soul_path.read_text(encoding="utf-8") if soul_path.exists() else ""
+        outline = generate_outline(evidence, soul_text)
+        outline_path.write_text(_json.dumps(outline, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"    Outline generated → {outline_path.name}")
+
+    # Stage 3: Script drafting
+    print("  Stage 3: Drafting script...")
+    en_txt = podcast_path / f"{clean_name}.podcast.txt"
+    en_mp3 = podcast_path / f"{clean_name}.podcast.mp3"
+
+    if en_txt.exists():
+        print(f"    Script exists: {en_txt.name}")
+        en_narrative = en_txt.read_text(encoding="utf-8")
+    else:
+        from pipeline_stages import draft_script
+        soul_path = Path(__file__).parent / "SOUL.md"
+        soul_text = soul_path.read_text(encoding="utf-8") if soul_path.exists() else ""
+        en_narrative = draft_script(
+            outline, evidence, soul_text,
+            video_title=video_title, extra_prompt=extra_prompt,
+            target_words=target_words, duo=duo,
+        )
+        if not en_narrative:
+            raise PipelineStageError("script_draft",
+                "script generation returned empty", str(outline_path))
+        en_narrative = _polish_for_tts(en_narrative, language="en", duo=duo)
+        en_txt.write_text(en_narrative, encoding="utf-8")
+        print(f"    Script saved: {en_txt.name}")
+
+    # Stage 4: Content QA (with revision loop)
+    print("  Stage 4: Content QA...")
+    _run_qa_revision_loop(en_narrative, en_txt, outline, evidence,
+                          soul_text if 'soul_text' in dir() else "",
+                          video_title, extra_prompt, target_words, duo,
+                          max_revisions=3)
+
+    # Stage 4b: Opening sentence freshness check
+    try:
+        from checks.check_opening import run as check_opening, update_opening_log
+        log_path = Path(__file__).parent / "checks" / "opening_log.json"
+        opening_result = check_opening({"script_text": en_narrative}, log_path)
+        if opening_result.passed:
+            print(f"    Opening check: {opening_result.reason}")
+        else:
+            print(f"    ⚠️ Opening check: {opening_result.reason}")
+            print(f"      (episode produced — consider revising the opening)")
+    except ImportError:
+        print("    Opening check not available, skipping.")
+
+    # Stage 4c: Independent verification against evidence (Phase 8)
+    _run_verification_stage(en_narrative, evidence, en_txt)
+
+    # Stage 5: Audio generation
+    print("  Stage 5: Audio generation...")
+    if not en_mp3.exists():
+        _gen_fn = _generate_duo_audio if duo else _generate_podcast_audio
+        if not _gen_fn(en_narrative, en_mp3, lang="en"):
+            raise PipelineStageError("audio_generation",
+                "Kokoro synthesis failed", str(en_txt))
+
+    # Intro/outro and mastering are handled by the caller (produce_podcast)
+    # to avoid double-splicing. Do NOT splice here.
+
+    print(f"  Evidence-first pipeline complete: {en_mp3.name}")
+
+    # Update opening log with this episode's first sentence
+    try:
+        from checks.check_opening import _extract_first_sentence, update_opening_log
+        log_path = Path(__file__).parent / "checks" / "opening_log.json"
+        opening = _extract_first_sentence(en_narrative)
+        if opening:
+            update_opening_log(log_path, clean_name, opening)
+    except Exception:
+        pass  # non-critical
+
+    return en_txt, en_mp3
+
+
+def _run_verification_stage(script_text: str, evidence: list[dict],
+                            script_path=None) -> dict | None:
+    """Phase 8: Run independent verification of the script against the evidence map.
+
+    Uses a different model than the drafter to decorrelate errors. Best-effort:
+    if the verifier is unavailable the stage is skipped with a warning and the
+    episode still produces. When a verification report is produced it is written
+    to ``<script>.verification_report.json`` alongside the script.
+
+    Returns the verification result dict (see ``verify_script``), or None when
+    the stage was skipped.
+    """
+    import json as _json
+    try:
+        from pipeline_stages import verify_script
+    except ImportError:
+        print("    Verification: pipeline_stages not available, skipping.")
+        return None
+
+    if not evidence:
+        print("    Verification: no evidence map, skipping.")
+        return None
+
+    try:
+        result = verify_script(script_text, evidence)
+    except RuntimeError as e:
+        print(f"    Verification: skipped ({e})")
+        return None
+    except ValueError as e:
+        print(f"    Verification: unparseable report, proceeding ({e})")
+        return None
+
+    claims = result["claims"]
+    high = result["high_confidence"]
+    threshold = result["threshold"]
+
+    for c in claims:
+        conf = c.get("confidence", "?")
+        ctype = c.get("type", "?")
+        claim_text = c.get("claim", "")[:60]
+        print(f"    ⚠️ Untraceable ({conf}/{ctype}): {claim_text}")
+
+    if not claims:
+        print("    Verification: all claims traceable ✓")
+    elif result["passed"]:
+        print(f"    Verification passed: {high} high-confidence "
+              f"untraceable claims (within threshold of {threshold})")
+    else:
+        print(f"    Verification FAILED: {high} high-confidence "
+              f"untraceable claims (threshold: {threshold}) "
+              f"— verification_failed: {high} untraceable claims")
+
+    # Persist the report next to the script for later inspection / QA.
+    if script_path is not None:
+        try:
+            report_path = Path(script_path).with_suffix(".verification_report.json")
+            report_path.write_text(
+                _json.dumps(result, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            print(f"    Verification report: {report_path.name}")
+        except OSError as e:
+            print(f"    Verification report not written: {e}")
+
+    return result
+
+
+def _run_qa_revision_loop(script_text, script_path, outline, evidence,
+                          soul_text, video_title, extra_prompt, target_words, duo,
+                          max_revisions=3):
+    """Run content QA and revise script up to max_revisions times."""
+    try:
+        from checks.quality_gate import run_quality_gate
+    except ImportError:
+        print("    Quality gate not available, skipping QA loop.")
+        return
+
+    for attempt in range(max_revisions):
+        report = run_quality_gate(script_text)
+        if report.passed:
+            print(f"    QA passed on attempt {attempt + 1}")
+            return
+        print(f"    QA failed (attempt {attempt + 1}/{max_revisions}):")
+        for f in report.blocking_failures[:3]:
+            print(f"      - {f}")
+
+        if attempt < max_revisions - 1:
+            print("    Revising script...")
+            from pipeline_stages import draft_script
+            qa_feedback = "Previous draft failed QA: " + "; ".join(report.blocking_failures)
+            revised = draft_script(
+                outline, evidence, soul_text,
+                video_title=video_title,
+                extra_prompt=f"{extra_prompt}\n{qa_feedback}" if extra_prompt else qa_feedback,
+                target_words=target_words, duo=duo,
+            )
+            if revised:
+                revised = _polish_for_tts(revised, language="en", duo=duo)
+                script_path.write_text(revised, encoding="utf-8")
+                script_text = revised
+                print(f"    Revised script saved")
+
+    print(f"    QA exhausted after {max_revisions} revisions, proceeding with best draft")
+    qa_report_path = script_path.parent / f"{script_path.stem}.quality_report.json"
+    import json
+    from checks.quality_gate import write_quality_report
+    report.checks["qa_exhausted"] = True
+    write_quality_report(report, qa_report_path)
+
+
 def _run_quality_gate(episode_slug, script_path, audio_path, podcast_dir):
     """Run quality checks and write quality_report.json. Warns on failure."""
     try:
@@ -1988,8 +2477,12 @@ def _run_quality_gate(episode_slug, script_path, audio_path, podcast_dir):
 
 
 def produce_podcast(summary_path, video_title="", podcast_dir=None,
-                    extra_prompt="", video_duration_seconds=0, duo=False):
-    """Full podcast pipeline: summary → narrate → TTS → MP3 (English + Spanish)."""
+                    extra_prompt="", video_duration_seconds=0, duo=False,
+                    pipeline="summary"):
+    """Full podcast pipeline: summary → narrate → TTS → MP3 (English + Spanish).
+
+    pipeline: "summary" (default) or "evidence" for the evidence-first path.
+    """
     if podcast_dir is None:
         podcast_dir = _AUDIO_DIR
     summary_path = Path(summary_path)
@@ -2040,30 +2533,44 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
     else:
         print("  Similarity check passed.")
 
-    # --- English ---
-    en_txt = podcast_path / f"{clean_name}.podcast.txt"
-    en_mp3 = podcast_path / f"{clean_name}.podcast.mp3"
-
-    if en_mp3.exists():
-        print(f"English podcast already exists: {en_mp3}")
-    else:
-        if en_txt.exists():
-            print(f"English narration exists, skipping MiniMax")
-            en_narrative = en_txt.read_text(encoding="utf-8")
-        else:
-            en_narrative = _narrate_as_podcast(
-                summary_text, video_title=video_title,
-                extra_prompt=extra_prompt, target_words=target_words, language="en", duo=duo)
-            if not en_narrative:
-                print("Failed to generate English narration.")
-                return None
-            en_narrative = _polish_for_tts(en_narrative, language="en", duo=duo)
-            en_txt.write_text(en_narrative, encoding="utf-8")
-            print(f"  English narration saved: {en_txt.name}")
-
-        _gen_fn = _generate_duo_audio if duo else _generate_podcast_audio
-        if not _gen_fn(en_narrative, en_mp3, lang="en"):
+    # --- Evidence-first pipeline ---
+    if pipeline == "evidence":
+        print(f"\n  Using evidence-first pipeline for {clean_name}")
+        try:
+            en_txt, en_mp3 = _run_evidence_pipeline(
+                summary_text, clean_name, podcast_path,
+                video_title=video_title, extra_prompt=extra_prompt,
+                target_words=target_words, duo=duo,
+            )
+        except PipelineStageError as e:
+            print(f"\n  Pipeline failed at stage '{e.stage}': {e}")
+            print(f"  Last artifact: {e.artifact_path or 'none'}")
             return None
+    else:
+        # --- Summary-first pipeline (existing) ---
+        en_txt = podcast_path / f"{clean_name}.podcast.txt"
+        en_mp3 = podcast_path / f"{clean_name}.podcast.mp3"
+
+        if en_mp3.exists():
+            print(f"English podcast already exists: {en_mp3}")
+        else:
+            if en_txt.exists():
+                print(f"English narration exists, skipping MiniMax")
+                en_narrative = en_txt.read_text(encoding="utf-8")
+            else:
+                en_narrative = _narrate_as_podcast(
+                    summary_text, video_title=video_title,
+                    extra_prompt=extra_prompt, target_words=target_words, language="en", duo=duo)
+                if not en_narrative:
+                    print("Failed to generate English narration.")
+                    return None
+                en_narrative = _polish_for_tts(en_narrative, language="en", duo=duo)
+                en_txt.write_text(en_narrative, encoding="utf-8")
+                print(f"  English narration saved: {en_txt.name}")
+
+            _gen_fn = _generate_duo_audio if duo else _generate_podcast_audio
+            if not _gen_fn(en_narrative, en_mp3, lang="en"):
+                return None
 
     # --- Spanish ---
     es_txt = podcast_path / f"{clean_name}.podcast.es.txt"
@@ -2095,6 +2602,26 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
             else:
                 if not _gen_fn(es_narrative, es_mp3, lang="es"):
                     print("Spanish audio generation failed.")
+
+    # --- Splice intro/outro before mastering ---
+    for mp3_path in [en_mp3, es_mp3]:
+        if mp3_path.exists() and _splice_intro_outro(mp3_path):
+            print(f"  Intro/outro added: {mp3_path.name}")
+
+    # --- Master audio to broadcast loudness (-16 LUFS) ---
+    try:
+        from checks.master_audio import master
+        for mp3_path in [en_mp3, es_mp3]:
+            if mp3_path.exists():
+                result = master(str(mp3_path))
+                if result.get("normalised"):
+                    print(f"  Mastered: {mp3_path.name} ({result.get('integrated_lufs')} LUFS)")
+                else:
+                    print(f"  Audio already in range: {mp3_path.name}")
+    except ImportError:
+        print("  Audio mastering not available (checks/master_audio.py not found).")
+    except Exception as e:
+        print(f"  Audio mastering failed: {e}")
 
     # --- Quality gate ---
     _run_quality_gate(clean_name, en_txt, en_mp3, podcast_path)
@@ -2204,7 +2731,7 @@ def publish_feed():
     result = subprocess.run(
         [sys.executable, str(generate_rss),
          "--base-url", "https://mrleepee.github.io/freeist-podcast/audio/",
-         "--title", "Señor Freedom",
+         "--title", "Señora Freedom",
          "--output", str(_RSS_OUTPUT)],
         capture_output=True, text=True,
     )

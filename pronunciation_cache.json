@@ -29,6 +29,7 @@
     "source": "manual",
     "word": "BTC"
   },
+  "cbdc": "C-B-D-C (central bank digital currency)",
   "ceo": {
     "ipa": "\u02ccsi\u02d0\u02cci\u02d0\u02c8o\u028a",
     "source": "manual",
@@ -109,6 +110,11 @@
     "source": "manual",
     "word": "ICO"
   },
+  "ide": {
+    "ipa": "a\u026ad",
+    "source": "wiktionary",
+    "word": "IDE"
+  },
   "ipv6": {
     "ipa": "\u02cca\u026a\u02c8pi\u02d0v\u0259\u0279si\u0259n\u02c8s\u026aks",
     "source": "manual",
@@ -143,6 +149,11 @@
     "ipa": "\u02c8k\u00e6fk\u0259",
     "source": "manual",
     "word": "Kafka"
+  },
+  "kairos": {
+    "ipa": "\u02c8ka\u026a\u0279\u0252s",
+    "source": "wiktionary",
+    "word": "KAIROS"
   },
   "kokoro": {
     "ipa": "\u02c8ko\u028ak\u0259\u02cc\u0279o\u028a",
@@ -239,6 +250,7 @@
     "source": "manual",
     "word": "Redis"
   },
+  "rest": "rest (as in REST API)",
   "rust": {
     "ipa": "\u0279\u028cst",
     "source": "wiktionary",
@@ -279,6 +291,11 @@
     "source": "wiktionary",
     "word": "transformer"
   },
+  "typescript": {
+    "ipa": "\u02c8t\u028c\u026apsk\u0279\u026apt",
+    "source": "wiktionary",
+    "word": "TypeScript"
+  },
   "unesco": {
     "ipa": "ju\u02c8n\u025bsko\u028a",
     "source": "manual",
@@ -309,6 +326,7 @@
     "source": "manual",
     "word": "Wireshark"
   },
+  "x402": "x-four-oh-two",
   "xrp": {
     "ipa": "\u02cc\u025bks\u02cc\u0251\u02d0r\u02c8pi\u02d0",
     "source": "manual",

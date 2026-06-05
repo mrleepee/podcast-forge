@@ -161,12 +161,12 @@ def main():
                         help="Path to podcast audio directory")
     parser.add_argument("--output", default="rss/feed.xml",
                         help="Output path for RSS XML (default: rss/feed.xml)")
-    parser.add_argument("--title", default="Señor Freedom",
-                        help="Podcast feed title (default: Señor Freedom)")
+    parser.add_argument("--title", default="Señora Freedom",
+                        help="Podcast feed title (default: Señora Freedom)")
     parser.add_argument("--description", default="Short-form podcast covering technology, finance, and global affairs.",
                         help="Podcast feed description")
-    parser.add_argument("--author", default="Señor Freedom",
-                        help="Podcast author (default: Señor Freedom)")
+    parser.add_argument("--author", default="Señora Freedom",
+                        help="Podcast author (default: Señora Freedom)")
     parser.add_argument("--language", default="en",
                         help="Feed language code (default: en)")
     parser.add_argument("--dry-run", action="store_true",

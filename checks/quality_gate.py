@@ -15,6 +15,7 @@ from checks.check_pronunciation import run as check_pronunciation
 from checks.check_substance import run as check_substance
 from checks.check_structure import run as check_structure
 from checks.check_dialogue import run as check_dialogue
+from checks.check_verification import run as check_verification
 
 
 @dataclass
@@ -36,15 +37,21 @@ class QualityReport:
 def run_quality_gate(
     script_text: str,
     audio_path: str | Path | None = None,
+    evidence: list | None = None,
 ) -> QualityReport:
     """Run all quality checks. Returns a QualityReport.
 
     Checks that require unavailable data (e.g. no audio file) are
     reported as skipped, not as failures.
+
+    When ``evidence`` is supplied, the independent verification check (Phase 8)
+    runs against it; without it, verification is omitted entirely so the
+    deterministic gate stays self-contained and offline.
     """
     fixture = {
         "script_text": script_text,
         "audio_path": str(audio_path) if audio_path else None,
+        "evidence": evidence,
     }
 
     checks_to_run = [
@@ -54,11 +61,22 @@ def run_quality_gate(
         ("structure", check_structure),
         ("dialogue", check_dialogue),
     ]
+    if evidence:
+        checks_to_run.append(("verification", check_verification))
 
     results = {}
     failures = []
 
     for name, check_fn in checks_to_run:
+        # Skip audio-dependent checks when no audio is available
+        if name == "loudness" and not audio_path:
+            results[name] = {
+                "passed": True,
+                "reason": "skipped: no audio file available",
+                "metrics": {},
+            }
+            continue
+
         result = check_fn(fixture)
         results[name] = {
             "passed": result.passed,

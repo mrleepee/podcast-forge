@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import tempfile
 from pathlib import Path
 
 TARGET_I = -16.0
@@ -21,10 +22,14 @@ def master(input_path: str | Path, output_path: str | Path | None = None) -> dic
 
     Pass 1: Measure current levels.
     Pass 2: Apply normalisation with measured offsets.
+    When output_path is None, writes to a temp file then replaces the original.
     """
     input_path = Path(input_path)
-    if output_path is None:
-        output_path = input_path  # overwrite
+    in_place = output_path is None
+    if in_place:
+        # FFmpeg cannot write to the same file it reads — use temp file
+        tmp = Path(tempfile.gettempdir()) / f"_master_{input_path.name}"
+        output_path = tmp
     output_path = Path(output_path)
 
     # Pass 1: measure
@@ -45,7 +50,9 @@ def master(input_path: str | Path, output_path: str | Path | None = None) -> dic
     input_i = float(stats.get("input_i", 0))
     input_tp = float(stats.get("input_tp", 0))
     if -17.0 <= input_i <= -15.0 and input_tp <= -1.0:
-        if input_path != output_path:
+        if in_place:
+            pass  # original is already good
+        elif input_path != output_path:
             subprocess.run(["cp", str(input_path), str(output_path)], check=True)
         return {
             "integrated_lufs": round(input_i, 1),
@@ -56,11 +63,6 @@ def master(input_path: str | Path, output_path: str | Path | None = None) -> dic
         }
 
     # Pass 2: normalise using measured values
-    # Build the loudnorm filter with linear adjustment from pass 1
-    measured_i = stats.get("target_offset", "0.0")
-    measured_tp = stats.get("target_tp", str(TARGET_TP))
-    measured_threshold = stats.get("threshold", "-70.0")
-
     filter_str = (
         f"loudnorm=I={TARGET_I}:TP={TARGET_TP}:LRA={TARGET_LRA}"
         f":measured_I={stats.get('input_i', input_i)}"
@@ -80,6 +82,11 @@ def master(input_path: str | Path, output_path: str | Path | None = None) -> dic
     )
     if r2.returncode != 0:
         raise RuntimeError(f"ffmpeg mastering failed: {r2.stderr[-500:]}")
+
+    # Replace original with mastered version
+    if in_place:
+        subprocess.run(["mv", str(output_path), str(input_path)], check=True)
+        output_path = input_path
 
     # Verify the output
     verify = subprocess.run(
