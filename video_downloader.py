@@ -1475,9 +1475,14 @@ _OMNIVOICE_WORKER = str(Path(__file__).resolve().parent / "tts_omnivoice.py")
 _OMNIVOICE_MODEL = os.environ.get("OMNIVOICE_MODEL", "k2-fsa/OmniVoice")
 # Voice-design instructions. Accents are English-only in OmniVoice, so Spanish
 # uses a plain female voice. _B variants give the second speaker in duo mode a
-# distinct timbre. (ref_audio voice-cloning is the planned upgrade — not wired yet.)
-# Speech pace. 0.85 matches the old Kokoro cadence (which ran ~0.85 effective).
+# distinct timbre. Voice-cloning via ref_audio is wired (see _OMNI_REF_AUDIO below).
 _OMNI_SPEED = float(os.environ.get("OMNIVOICE_SPEED", "0.9"))
+
+# Per-chunk trim + de-click settings for seamless concatenation.
+_OMNI_TRIM_DB       = float(os.environ.get("OMNIVOICE_TRIM_DB", "-40"))    # silence threshold
+_OMNI_TRIM_KEEP_MS  = int(os.environ.get("OMNIVOICE_TRIM_KEEP_MS", "30"))  # margin kept each side
+_OMNI_TRIM_MAX_MS   = int(os.environ.get("OMNIVOICE_TRIM_MAX_MS", "300"))  # never trim more per side
+_OMNI_FADE_MS       = int(os.environ.get("OMNIVOICE_FADE_MS", "8"))        # de-click fade in/out
 _OMNI_INSTRUCT_EN = "female, british accent, young adult"
 _OMNI_INSTRUCT_EN_B = "male, british accent, young adult"
 _OMNI_INSTRUCT_ES = "female, young adult"
@@ -1498,6 +1503,57 @@ if _OMNI_REF_AUDIO:
     _ref_txt_path = Path(_OMNI_REF_AUDIO).with_suffix(".txt")
     if _ref_txt_path.exists():
         _OMNI_REF_TEXT = _ref_txt_path.read_text().strip()
+
+_REF_CLIP_VALIDATED = False  # guard: validate once per process
+
+
+def _validate_ref_clip(path, ref_text, *, sr_expected=24000, min_trailing_ms=150):
+    """Return a list of human-readable warnings ([] == clean) and path to cleaned clip."""
+    import numpy as np
+    import soundfile as sf
+    warns = []
+    try:
+        wav, sr = sf.read(path)
+    except Exception as e:
+        return [f"could not read ref clip {path}: {e}"], None
+    if wav.ndim > 1:
+        wav = wav.mean(axis=1)
+    if sr != sr_expected:
+        warns.append(f"ref sample rate {sr} != expected {sr_expected}")
+    amp = np.abs(wav)
+    thr = 10.0 ** (-40.0 / 20.0)
+    above = np.flatnonzero(amp > thr)
+    if above.size == 0:
+        return warns + ["ref clip is silent"], None
+    trailing_ms = (wav.size - (above[-1] + 1)) / sr * 1000.0
+    if trailing_ms < min_trailing_ms:
+        warns.append(
+            f"ref clip ends mid-speech ({trailing_ms:.0f}ms trailing silence; "
+            f"need >= {min_trailing_ms}ms) -- RE-CUT the clip; this causes per-chunk echo")
+    if not ref_text or len(ref_text.split()) < 3:
+        warns.append("ref_text missing/too short -- required for clean cloning")
+    else:
+        dur = wav.size / sr
+        wps = len(ref_text.split()) / dur if dur > 0 else 0.0
+        if not (1.5 <= wps <= 5.0):
+            warns.append(
+                f"ref_text/clip length mismatch ({wps:.1f} words/sec) -- "
+                f"verify the transcript matches the audio exactly")
+
+    # Produce a cleaned copy with trimmed edges
+    clean_path = None
+    keep = int(_OMNI_TRIM_KEEP_MS * sr / 1000)
+    max_trim = int(_OMNI_TRIM_MAX_MS * sr / 1000)
+    lead_sil = int(above[0])
+    trail_sil = int(wav.size - (above[-1] + 1))
+    trim_lead = min(max(0, lead_sil - keep), max_trim)
+    trim_trail = min(max(0, trail_sil - keep), max_trim)
+    if trim_lead > 0 or trim_trail > 0:
+        cleaned = wav[trim_lead: wav.size - trim_trail]
+        clean_path = str(Path(path).with_name(
+            Path(path).stem + "_clean" + Path(path).suffix))
+        sf.write(clean_path, cleaned, sr)
+    return warns, clean_path
 
 
 def _use_omnivoice() -> bool:
@@ -1544,16 +1600,65 @@ def _chunk_text(text, max_chars=600):
     return chunks
 
 
+def _trim_segment_audio(wav, sr, *, thresh_db=-40.0, keep_ms=30,
+                        max_trim_ms=300, fade_ms=8):
+    """Trim leading/trailing near-silence (bounded) and apply de-click fades.
+
+    wav: 1-D float array in [-1, 1]. Returns a (possibly shorter) 1-D array.
+    Never trims more than max_trim_ms per side, so real soft onsets survive.
+    """
+    import numpy as np
+    if wav.size == 0:
+        return wav
+    amp = np.abs(wav)
+    thresh = 10.0 ** (thresh_db / 20.0)          # dBFS -> linear
+    above = np.flatnonzero(amp > thresh)
+    if above.size == 0:
+        return wav[:0]                            # all silence -> drop
+
+    keep = int(keep_ms * sr / 1000)
+    max_trim = int(max_trim_ms * sr / 1000)
+
+    lead_sil = int(above[0])
+    trail_sil = int(wav.size - (above[-1] + 1))
+    trim_lead = min(max(0, lead_sil - keep), max_trim)
+    trim_trail = min(max(0, trail_sil - keep), max_trim)
+
+    seg = wav[trim_lead: wav.size - trim_trail].copy()
+
+    f = int(fade_ms * sr / 1000)
+    if f > 0 and seg.size > 2 * f:
+        ramp = np.linspace(0.0, 1.0, f, dtype=seg.dtype)
+        seg[:f] *= ramp
+        seg[-f:] *= ramp[::-1]
+    return seg
+
+
 # Literal pre-TTS fixups for the OmniVoice path (engine reads these better than
 # the raw form). Grow empirically from verification listen-throughs.
 _OMNI_TEXT_FIXUPS = [
     ("tmux", "tee-mux"),
 ]
 
+# Adjacent-number separator: when a version number is followed immediately by a
+# size/parameter count, insert a comma so the two numbers don't bind in TTS.
+# e.g. "Gemma four twelve billion" -> "Gemma four, twelve billion"
+# Negative cases that must NOT match: "two hundred thousand", "twenty twenty-six"
+_NUM_WORD = (r"(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|"
+             r"thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|"
+             r"thirty|forty|fifty|sixty|seventy|eighty|ninety|\d+)"
+             r"(?:[- ](?:one|two|three|four|five|six|seven|eight|nine))?")
+_MAGNITUDE = r"(?:billion|million|thousand|trillion)"
+_RE_ADJ_NUM = re.compile(
+    rf"\b({_NUM_WORD})\s+({_NUM_WORD}\s+{_MAGNITUDE})\b", re.IGNORECASE)
+
 
 def _omnivoice_fixups(text):
     for needle, repl in _OMNI_TEXT_FIXUPS:
         text = re.sub(rf'\b{re.escape(needle)}\b', repl, text)
+    # Separate a version number from an immediately-following size, so two
+    # numbers don't bind ("Gemma four twelve billion" -> "Gemma four, twelve billion").
+    text = _RE_ADJ_NUM.sub(r"\1, \2", text)
     return text
 
 
@@ -1616,6 +1721,17 @@ def _omnivoice_render(segments, output_mp3_path, *, silence_sec=0.12):
                 entry["instruct"] = seg["instruct"]
             job_segments.append(entry)
 
+        # --- Validate reference clip (once per process) ---
+        effective_ref_audio = _OMNI_REF_AUDIO
+        global _REF_CLIP_VALIDATED
+        if _OMNI_REF_AUDIO and not _REF_CLIP_VALIDATED:
+            _REF_CLIP_VALIDATED = True
+            warns, clean_path = _validate_ref_clip(_OMNI_REF_AUDIO, _OMNI_REF_TEXT)
+            for w in warns:
+                print(f"  [ref] {w}")
+            if clean_path:
+                effective_ref_audio = clean_path
+
         job = {
             "model": _OMNIVOICE_MODEL,
             "instruct_en": _OMNI_INSTRUCT_EN,
@@ -1623,9 +1739,9 @@ def _omnivoice_render(segments, output_mp3_path, *, silence_sec=0.12):
             "speed": _OMNI_SPEED,
             "segments": job_segments,
         }
-        if _OMNI_REF_AUDIO:
+        if effective_ref_audio:
             # Voice-clone mode: locked timbre overrides instruct for all segments.
-            job["ref_audio"] = _OMNI_REF_AUDIO
+            job["ref_audio"] = effective_ref_audio
             if _OMNI_REF_TEXT:
                 job["ref_text"] = _OMNI_REF_TEXT
         job_path = os.path.join(tmpdir, "job.json")
@@ -1657,10 +1773,19 @@ def _omnivoice_render(segments, output_mp3_path, *, silence_sec=0.12):
             wav, _ = sf.read(seg["out_wav"])
             if wav.ndim > 1:
                 wav = wav.mean(axis=1)
+            wav = _trim_segment_audio(
+                wav, sr,
+                thresh_db=_OMNI_TRIM_DB, keep_ms=_OMNI_TRIM_KEEP_MS,
+                max_trim_ms=_OMNI_TRIM_MAX_MS, fade_ms=_OMNI_FADE_MS,
+            )
+            if wav.size == 0:
+                continue
             parts.append(wav)
             if multi:
                 parts.append(silence)
-        full = np.concatenate(parts)
+        if parts and multi and len(parts) > 1:
+            parts = parts[:-1]   # drop trailing silence after last segment
+        full = np.concatenate(parts) if parts else np.zeros(0)
         duration = len(full) / sr
 
         wav_path = str(output_mp3_path).rsplit(".", 1)[0] + ".tmp.wav"
