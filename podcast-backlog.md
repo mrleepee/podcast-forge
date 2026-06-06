@@ -67,7 +67,14 @@ Liberland episodes spaced with 4 non-Liberland between each.
    - Flags: default (~5 min)
    - Notes: Anthropic engineer James Brady's 29-minute talk on agent verification. Key quote: "Every agent in production lies. We measured it. The good ones lie less, the great ones catch the lie before the user does." Walks through the verification stack he built and the patterns the Claude Code team adopted. Connects to ep126 (closing the feedback loop), ep111 (systems that prompt themselves), ep115 (session management). Señora Freedom angle: if every agent lies, the question isn't trust — it's how fast you catch it.
 
-6. 🏛️ **Bezrukov at SPIEF: "Accept That War Is the New Normal"**
+6. 🤖 **Boris Cherny: Loops, Routines, and Dynamic Workflows**
+   - Category: AI
+   - Source: https://x.com/0xMovez/status/2062970118033023115/video/1
+   - Type: URL-based
+   - Flags: default (~5 min)
+   - Notes: Boris Cherny (creator of Claude Code) reveals his real daily setup in a 24-minute clip. Key quote: "I don't prompt Claude anymore. What I mostly use now is loops. I create loops — they do the rest of my job." Covers Claude + loops + routines + dynamic workflows. Overlaps with item #2 (Boris Cherny setup tips) — produce whichever has more novel content. Connects to ep115 (session management), ep111 (systems that prompt themselves), ep100 (dynamic workflows). Señora Freedom angle: the tool is free — the setup tax is attention, and most people won't pay it.
+
+7. 🏛️ **Bezrukov at SPIEF: "Accept That War Is the New Normal"**
    - Category: Libertarian
    - Source: https://x.com/STANISKRAPIVNIK/status/2062549390909170079
    - Type: URL-based
