@@ -80,3 +80,11 @@ Liberland episodes spaced with 4 non-Liberland between each.
    - Type: URL-based
    - Flags: `--long` (~10 min)
    - Notes: Stanislav Krapivnik shares key theses from Andrey Bezrukov (former SVR intelligence officer, exposed as Russian illegal "Donald Heathfield" in 2010) speaking at St. Petersburg International Economic Forum (Jun 2026, 77K views). Bezrukov argues: (1) Russia is in a "new type of war" — attrition and subversion targeting leaders, infrastructure, scientists, not territory, (2) West pursuing "boiling frog" strategy to avoid nuclear clash while gradually escalating, (3) "We're on the first hill of world war" — next major clash likely in Asia, (4) enemy aims to neutralise Russian nuclear forces via space-based systems or agent-planted strikes like "Operation Spider Web", (5) biowar threat from labs around Russia's borders, (6) economy must serve both development and defence for "a couple of decades", (7) "Stop being good — too many red lines remain on paper." **Fact-check thoroughly**: verify Bezrukov's identity and background (SVR colonel, arrested in US 2010 as part of Illegals Program, deported in spy swap), verify SPIEF 2026 context, cross-reference claims about "Operation Spider Web" and biolab allegations against known sources. Connects to ep90 (Liberland meritocracy), ep97 (Liberland para-state). Señora Freedom angle: when both sides claim existential threat, who pays the price?
+
+8. 💰 **The AI Bubble Explained**
+   - Category: Finance
+   - Source: https://x.com/FinanceLancelot/status/2063408394111783353/video/1
+   - Type: URL-based
+   - Flags: `--long` (~10 min)
+   - Extra prompt: mirror all points in fine detail
+   - Notes: FinanceLancelot shares what he calls "the best explanation of the AI bubble I've ever heard" — a video from @atmoio covering the insanity of AI hype and bubble dynamics. **Extra prompt**: mirror all points in fine detail — ensure the narration reproduces every argument and data point from the source. Connects to the broader AI investment narrative, Silicon Valley spending, and the question of whether AI delivers on its promises. Señora Freedom angle: when trillions flow into a narrative, who profits and who pays?
