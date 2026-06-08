@@ -88,3 +88,10 @@ Liberland episodes spaced with 4 non-Liberland between each.
    - Flags: `--long` (~10 min)
    - Extra prompt: mirror all points in fine detail
    - Notes: FinanceLancelot shares what he calls "the best explanation of the AI bubble I've ever heard" — a video from @atmoio covering the insanity of AI hype and bubble dynamics. **Extra prompt**: mirror all points in fine detail — ensure the narration reproduces every argument and data point from the source. Connects to the broader AI investment narrative, Silicon Valley spending, and the question of whether AI delivers on its promises. Señora Freedom angle: when trillions flow into a narrative, who profits and who pays?
+
+9. 🤖 **Demis Hassabis: Who Survives the Next 5 Years**
+   - Category: AI
+   - Source: https://x.com/spectnfa/status/2063701797252825262/video/1
+   - Type: URL-based
+   - Flags: default (~5 min)
+   - Notes: @spectnfa shares a clip of Nobel Prize winner Demis Hassabis (DeepMind co-founder, Nobel Chemistry 2024 for AlphaFold) on AI adoption and survival. Key quote: "One person who understands AI will outperform an entire startup team." Most founders heard that and thought they need prompt engineering — wrong. The real insight is about understanding AI systems, not prompting. Connects to ep111 (systems that prompt themselves), ep115 (session management), item #2 (Boris Cherny setup tips). Señora Freedom angle: the Nobel laureate says the advantage goes to understanding, not credentials — so why is the education system still selling the opposite?
