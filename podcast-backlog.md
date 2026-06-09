@@ -65,21 +65,21 @@ Liberland episodes spaced with 4 non-Liberland between each.
    - Extra prompt: mirror all points in fine detail
    - Notes: FinanceLancelot shares what he calls "the best explanation of the AI bubble I've ever heard" — a video from @atmoio covering the insanity of AI hype and bubble dynamics. **Extra prompt**: mirror all points in fine detail — ensure the narration reproduces every argument and data point from the source. Connects to the broader AI investment narrative, Silicon Valley spending, and the question of whether AI delivers on its promises. Señora Freedom angle: when trillions flow into a narrative, who profits and who pays?
 
-6. 🤖 **Demis Hassabis: Who Survives the Next 5 Years**
+5. 🤖 **Demis Hassabis: Who Survives the Next 5 Years**
    - Category: AI
    - Source: https://x.com/spectnfa/status/2063701797252825262/video/1
    - Type: URL-based
    - Flags: default (~5 min)
    - Notes: @spectnfa shares a clip of Nobel Prize winner Demis Hassabis (DeepMind co-founder, Nobel Chemistry 2024 for AlphaFold) on AI adoption and survival. Key quote: "One person who understands AI will outperform an entire startup team." Most founders heard that and thought they need prompt engineering — wrong. The real insight is about understanding AI systems, not prompting. Connects to ep111 (systems that prompt themselves), ep115 (session management), item #1 (Boris Cherny setup tips). Señora Freedom angle: the Nobel laureate says the advantage goes to understanding, not credentials — so why is the education system still selling the opposite?
 
-7. 🤖 **Karpathy: From Vibe Coding to Agentic Engineering**
+6. 🤖 **Karpathy: From Vibe Coding to Agentic Engineering**
     - Category: AI
     - Source: https://x.com/0xMovez/status/2063989380583137587/video/1
     - Type: URL-based
     - Flags: default (~5 min)
     - Notes: @0xMovez shares a 30-minute Andrej Karpathy talk on building an AI agent workflow from scratch. Key quote: "Vibe coding is incredible. But agentic engineering is the next level. 90% of my coding routine is automated by AI agents." Covers the transition from vibe coding (anyone can code) to agentic engineering (professionals orchestrate agents). **Similarity warning**: overlaps with ep81 (Karpathy Software 3.0), ep121 (90% of what AI Twitter tells you), and the vibe-coding-vs-agentic-engineering theme already in the feed. The similarity gate should catch this — if it doesn't, the episode may need to be skipped or merged with existing coverage. Connects to ep111 (systems that prompt themselves), ep100 (dynamic workflows). Señora Freedom angle: vibe coding democratizes creation; agentic engineering concentrates power — which future are we building?
 
-8. 🤖 **Agentic Harness Engineering: The Paper That Proves Your Prompt Isn't Enough**
+7. 🤖 **Agentic Harness Engineering: The Paper That Proves Your Prompt Isn't Enough**
     - Category: AI
     - Source: https://arxiv.org/html/2604.25850v4
     - Type: Research-based (arxiv paper)
