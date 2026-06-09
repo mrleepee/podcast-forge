@@ -1,4 +1,5 @@
 {
   "ep133-beyond-basics-claude-code-systems-that-prompt-themselves": "minor pronunciation issue: ED (text editor name), not a word",
-  "ep131-anthropic-self-service-data-analytics": "duplicate ep131 caused by concurrent process; quality gate only flagged CI pronunciation"
+  "ep131-anthropic-self-service-data-analytics": "duplicate ep131 caused by concurrent process; quality gate only flagged CI pronunciation",
+  "ep132-video-themaxdose": "no quality_report.json; EN 3.1MB 3.3min + ES 2.4MB 4.0min produced manually"
 }

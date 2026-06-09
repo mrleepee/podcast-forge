@@ -1,6 +1,7 @@
 # Podcast Production Backlog
 
 ## Published from this backlog
+- ep132 — Emerging Medications That Could Reverse Aging
 - ep136 — Boris Cherny's Claude Code Setup Tips: Stop Wasting 14% of Your Context Window
 - ep127 — Istanbul Real Estate: Renovation Costs and ROI for Turkish CBI
 - ep126 — Closing Claude Code's Feedback Loop — Self-Checking Before Handoff
@@ -36,28 +37,21 @@
 Categories: 🤖 AI · 🏠 Nomad · 🏛️ Libertarian · 💰 Finance · 🎥 Video
 Liberland episodes spaced with 4 non-Liberland between each.
 
-1. 🎥 **From Longevity to Curing Autoimmune Disease — The Future Is Bright**
-   - Category: Video
-   - Source: https://www.instagram.com/reels/DZGTYHPJhgZ/
-   - Type: URL-based
-   - Flags: default (~5 min)
-   - Notes: Instagram reel from @themaxdose covering the frontier of longevity/aging research and autoimmune disease cures. Cited research in the comments. Health and longevity science angle for the podcast.
-
-2. 🤖 **James Brady: Every Agent in Production Lies**
+1. 🤖 **James Brady: Every Agent in Production Lies**
    - Category: AI
    - Source: https://x.com/0x_rody/status/2063318596202242171/video/1
    - Type: URL-based
    - Flags: default (~5 min)
    - Notes: Anthropic engineer James Brady's 29-minute talk on agent verification. Key quote: "Every agent in production lies. We measured it. The good ones lie less, the great ones catch the lie before the user does." Walks through the verification stack he built and the patterns the Claude Code team adopted. Connects to ep126 (closing the feedback loop), ep111 (systems that prompt themselves), ep115 (session management). Señora Freedom angle: if every agent lies, the question isn't trust — it's how fast you catch it.
 
-3. 🏛️ **Bezrukov at SPIEF: "Accept That War Is the New Normal"**
+2. 🏛️ **Bezrukov at SPIEF: "Accept That War Is the New Normal"**
    - Category: Libertarian
    - Source: https://x.com/STANISKRAPIVNIK/status/2062549390909170079
    - Type: URL-based
    - Flags: `--long` (~10 min)
    - Notes: Stanislav Krapivnik shares key theses from Andrey Bezrukov (former SVR intelligence officer, exposed as Russian illegal "Donald Heathfield" in 2010) speaking at St. Petersburg International Economic Forum (Jun 2026, 77K views). Bezrukov argues: (1) Russia is in a "new type of war" — attrition and subversion targeting leaders, infrastructure, scientists, not territory, (2) West pursuing "boiling frog" strategy to avoid nuclear clash while gradually escalating, (3) "We're on the first hill of world war" — next major clash likely in Asia, (4) enemy aims to neutralise Russian nuclear forces via space-based systems or agent-planted strikes like "Operation Spider Web", (5) biowar threat from labs around Russia's borders, (6) economy must serve both development and defence for "a couple of decades", (7) "Stop being good — too many red lines remain on paper." **Fact-check thoroughly**: verify Bezrukov's identity and background (SVR colonel, arrested in US 2010 as part of Illegals Program, deported in spy swap), verify SPIEF 2026 context, cross-reference claims about "Operation Spider Web" and biolab allegations against known sources. Connects to ep90 (Liberland meritocracy), ep97 (Liberland para-state). Señora Freedom angle: when both sides claim existential threat, who pays the price?
 
-4. 💰 **The AI Bubble Explained**
+3. 💰 **The AI Bubble Explained**
    - Category: Finance
    - Source: https://x.com/FinanceLancelot/status/2063408394111783353/video/1
    - Type: URL-based
@@ -65,21 +59,21 @@ Liberland episodes spaced with 4 non-Liberland between each.
    - Extra prompt: mirror all points in fine detail
    - Notes: FinanceLancelot shares what he calls "the best explanation of the AI bubble I've ever heard" — a video from @atmoio covering the insanity of AI hype and bubble dynamics. **Extra prompt**: mirror all points in fine detail — ensure the narration reproduces every argument and data point from the source. Connects to the broader AI investment narrative, Silicon Valley spending, and the question of whether AI delivers on its promises. Señora Freedom angle: when trillions flow into a narrative, who profits and who pays?
 
-5. 🤖 **Demis Hassabis: Who Survives the Next 5 Years**
+4. 🤖 **Demis Hassabis: Who Survives the Next 5 Years**
    - Category: AI
    - Source: https://x.com/spectnfa/status/2063701797252825262/video/1
    - Type: URL-based
    - Flags: default (~5 min)
    - Notes: @spectnfa shares a clip of Nobel Prize winner Demis Hassabis (DeepMind co-founder, Nobel Chemistry 2024 for AlphaFold) on AI adoption and survival. Key quote: "One person who understands AI will outperform an entire startup team." Most founders heard that and thought they need prompt engineering — wrong. The real insight is about understanding AI systems, not prompting. Connects to ep111 (systems that prompt themselves), ep115 (session management), item #1 (Boris Cherny setup tips). Señora Freedom angle: the Nobel laureate says the advantage goes to understanding, not credentials — so why is the education system still selling the opposite?
 
-6. 🤖 **Karpathy: From Vibe Coding to Agentic Engineering**
+5. 🤖 **Karpathy: From Vibe Coding to Agentic Engineering**
     - Category: AI
     - Source: https://x.com/0xMovez/status/2063989380583137587/video/1
     - Type: URL-based
     - Flags: default (~5 min)
     - Notes: @0xMovez shares a 30-minute Andrej Karpathy talk on building an AI agent workflow from scratch. Key quote: "Vibe coding is incredible. But agentic engineering is the next level. 90% of my coding routine is automated by AI agents." Covers the transition from vibe coding (anyone can code) to agentic engineering (professionals orchestrate agents). **Similarity warning**: overlaps with ep81 (Karpathy Software 3.0), ep121 (90% of what AI Twitter tells you), and the vibe-coding-vs-agentic-engineering theme already in the feed. The similarity gate should catch this — if it doesn't, the episode may need to be skipped or merged with existing coverage. Connects to ep111 (systems that prompt themselves), ep100 (dynamic workflows). Señora Freedom angle: vibe coding democratizes creation; agentic engineering concentrates power — which future are we building?
 
-7. 🤖 **Agentic Harness Engineering: The Paper That Proves Your Prompt Isn't Enough**
+6. 🤖 **Agentic Harness Engineering: The Paper That Proves Your Prompt Isn't Enough**
     - Category: AI
     - Source: https://arxiv.org/html/2604.25850v4
     - Type: Research-based (arxiv paper)
