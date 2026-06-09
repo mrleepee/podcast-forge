@@ -2352,15 +2352,33 @@ def _check_sponsored_content(summary_text, source_label=""):
     return None
 
 
-def _next_episode_number(podcast_dir=None):
-    """Find the next episode number by scanning existing ep##.podcast.mp3 files."""
+def _next_episode_number(podcast_dir=None, episodes_json=None):
+    """Find the next episode number from the union of the local audio dir and the
+    published registry (episodes.json).
+
+    Scanning only the local dir let two different episodes ship as the same epNN
+    when the local dir was out of sync with the feed (the documented ep122
+    collision). Consult both so the next number is past everything we've ever
+    published (P1.4).
+    """
     if podcast_dir is None:
         podcast_dir = _AUDIO_DIR
+    if episodes_json is None:
+        episodes_json = _EPISODES_JSON
     highest = 0
     for f in Path(podcast_dir).glob("ep*.podcast.mp3"):
         m = re.match(r"ep(\d+)", f.name)
         if m:
             highest = max(highest, int(m.group(1)))
+    try:
+        episodes_json = Path(episodes_json)
+        if episodes_json.exists():
+            for slug in json.loads(episodes_json.read_text(encoding="utf-8")):
+                m = re.match(r"ep(\d+)", str(slug))
+                if m:
+                    highest = max(highest, int(m.group(1)))
+    except (OSError, json.JSONDecodeError):
+        pass  # registry unreadable — fall back to local-dir scan only
     return highest + 1
 
 
@@ -2523,8 +2541,28 @@ def _run_verification_stage(script_text: str, evidence: list[dict],
         print(f"    Verification: skipped ({e})")
         return None
     except ValueError as e:
-        print(f"    Verification: unparseable report, proceeding ({e})")
-        return None
+        # Unparseable report is an error, not a pass — write a failing report so
+        # the publish gate treats it as "verification not performed" (P1.2).
+        print(f"    Verification: unparseable report (recorded as error) ({e})")
+        result = {
+            "claims": [], "high_confidence": 0, "threshold": 3,
+            "passed": False, "status": "error", "error": str(e),
+        }
+
+    # A verifier that returned prose instead of a verdict did not actually run.
+    # Surface it distinctly and let the failing report block at publish (P1.2).
+    if result.get("status") == "error":
+        print(f"    ⚠️ Verification ERROR: {result.get('error', 'no verdict returned')}")
+        print("      (recorded as not-performed — will be held back at publish)")
+        if script_path is not None:
+            try:
+                report_path = Path(script_path).with_suffix(".verification_report.json")
+                report_path.write_text(
+                    _json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
+                print(f"    Verification report: {report_path.name}")
+            except OSError as e:
+                print(f"    Verification report not written: {e}")
+        return result
 
     claims = result["claims"]
     high = result["high_confidence"]

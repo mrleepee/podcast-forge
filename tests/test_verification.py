@@ -172,12 +172,23 @@ class TestVerifyScript:
         result = pipeline_stages.verify_script("script", _EVIDENCE)
         assert result["high_confidence"] == 1
 
-    def test_no_array_means_nothing_flagged(self, monkeypatch):
+    def test_no_array_is_error_not_pass(self, monkeypatch):
+        # P1.2: prose with no JSON array means the verifier did not return a
+        # verdict — that is an error, NOT a clean bill of health.
         self._patch(monkeypatch, "All claims are supported by the evidence.")
         import pipeline_stages
         result = pipeline_stages.verify_script("script", _EVIDENCE)
         assert result["claims"] == []
-        assert result["passed"] is True
+        assert result["status"] == "error"
+        assert result["passed"] is False
+
+    def test_valid_array_reports_ok_status(self, monkeypatch):
+        self._patch(monkeypatch, json.dumps([
+            {"claim": "x", "confidence": "high", "type": "quote", "reason": "absent"},
+        ]))
+        import pipeline_stages
+        result = pipeline_stages.verify_script("script", _EVIDENCE)
+        assert result["status"] == "ok"
 
     def test_unparseable_array_raises(self, monkeypatch):
         # Has brackets (so the array regex matches) but invalid JSON inside.

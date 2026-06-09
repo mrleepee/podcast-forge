@@ -23,6 +23,7 @@ is cheap to unit-test with fixtures. ``video_downloader.publish_feed`` calls
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -46,11 +47,28 @@ class EpisodeVerdict:
         }
 
 
+def episode_number(slug: str):
+    """Parse the leading ``epNN`` number from a slug, or None."""
+    m = re.match(r"ep(\d+)", slug)
+    return int(m.group(1)) if m else None
+
+
+def find_duplicate_numbers(slugs) -> dict:
+    """Return ``{number: [slugs]}`` for episode numbers used by >1 slug (P1.4)."""
+    by_num: dict = {}
+    for slug in slugs:
+        num = episode_number(slug)
+        if num is not None:
+            by_num.setdefault(num, []).append(slug)
+    return {num: sorted(group) for num, group in by_num.items() if len(group) > 1}
+
+
 @dataclass
 class PublishGateResult:
     """Aggregate verdict over an audio directory."""
     publishable: list = field(default_factory=list)   # list[EpisodeVerdict]
     needs_review: list = field(default_factory=list)   # list[EpisodeVerdict]
+    duplicate_numbers: dict = field(default_factory=dict)  # {number: [slugs]}
 
     @property
     def publishable_slugs(self) -> list:
@@ -97,6 +115,10 @@ def evaluate_episode(slug: str, audio_dir, overrides: dict | None = None) -> Epi
     # tighter "verification not performed" treatment in a later phase).
     verification = _load_json(audio_dir / f"{slug}.podcast.verification_report.json")
     if verification is not None and verification.get("passed") is False:
+        if verification.get("status") == "error":
+            # Verifier returned no parseable verdict — verification not performed,
+            # which is not the same as a clean pass (P1.2).
+            return EpisodeVerdict(slug, False, "verification not performed (verifier error)")
         high = verification.get("high_confidence")
         detail = f"{high} untraceable claims" if high is not None else "verification failed"
         return EpisodeVerdict(slug, False, f"verification failed: {detail}")
@@ -125,9 +147,23 @@ def run_publish_gate(audio_dir, overrides_path=None, suffix: str = DEFAULT_SUFFI
     if not audio_dir.exists():
         return result
 
-    for mp3 in sorted(audio_dir.glob(f"*{suffix}")):
-        slug = mp3.name[: -len(suffix)]
-        verdict = evaluate_episode(slug, audio_dir, overrides)
+    slugs = [mp3.name[: -len(suffix)] for mp3 in sorted(audio_dir.glob(f"*{suffix}"))]
+    verdicts = {slug: evaluate_episode(slug, audio_dir, overrides) for slug in slugs}
+
+    # Duplicate episode-number assertion (P1.4): two episodes sharing epNN is a
+    # catalog bug (the documented ep122 collision). Block the colliding episodes
+    # unless they are explicitly allowlisted (legacy duplicates are grandfathered).
+    result.duplicate_numbers = find_duplicate_numbers(slugs)
+    for num, group in result.duplicate_numbers.items():
+        for slug in group:
+            if verdicts[slug].overridden:
+                continue
+            others = ", ".join(s for s in group if s != slug)
+            verdicts[slug] = EpisodeVerdict(
+                slug, False, f"duplicate episode number ep{num} (also: {others})")
+
+    for slug in slugs:
+        verdict = verdicts[slug]
         if verdict.publishable:
             result.publishable.append(verdict)
         else:
