@@ -1,3 +1,4 @@
 {
-  "ep133-beyond-basics-claude-code-systems-that-prompt-themselves": "minor pronunciation issue: ED (text editor name), not a word"
+  "ep133-beyond-basics-claude-code-systems-that-prompt-themselves": "minor pronunciation issue: ED (text editor name), not a word",
+  "ep131-anthropic-self-service-data-analytics": "duplicate ep131 caused by concurrent process; quality gate only flagged CI pronunciation"
 }

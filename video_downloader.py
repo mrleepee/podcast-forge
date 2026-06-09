@@ -1197,6 +1197,8 @@ def _narrate_as_podcast(summary_text, video_title="", extra_prompt="",
     language: "en" for British English, "es" for beginner-friendly Spanish.
     duo: if True, generate two-speaker dialogue (Host/Co-host) instead of solo.
     """
+    import urllib.request
+    import urllib.error
     api_key = os.environ.get("MINIMAX_API_KEY")
     if not api_key:
         print("Error: MINIMAX_API_KEY not set.")
