@@ -17,7 +17,7 @@ it earned it*.
 |-------|-------|--------|
 | **1 — Close the loop** | P0.1, P0.2, P0.3, P1.1, P1.3, lazy `yt_dlp` import | ✅ done |
 | **2 — Bugs & registry** | P1.2 (verifier `error` status), P1.4 (episode-number registry) | ✅ done |
-| 3 — Pronunciation | P2.1 (lowercase risky-lexicon + spoken-form substitution) | ⬜ pending |
+| **3 — Pronunciation** | P2.1 (lowercase risky-lexicon + spoken-form substitution) | ✅ done |
 | 4 — Audio integrity | P2.2 (ref-clip hard-fail + Phase 4 QC harness) | ⬜ pending |
 | 5 — Spanish track | P2.3 (gate vs drop — **decision deferred by owner**) | ⬜ pending |
 | 6 — Distribution | P3 (stable GUIDs, itunes:image/type, owner email, transcripts) | ⬜ pending |
@@ -100,3 +100,32 @@ it earned it*.
 - Gate fails on a feed fixture with a duplicated number ✅
 - Verifier prose response → report status `error`, not `passed: true` ✅
 - Full suite: 146 passed, 1 skipped ✅
+
+## Phase 3 — Pronunciation lexicon (done)
+
+**Branch:** `feature/pipeline-integrity-phase3-pronunciation`
+
+### What's included
+- **P2.1** — New `checks/risky_terms.json`: a curated lowercase technical-term →
+  spoken-form lexicon (tmux → "tee-mux", nginx → "engine-X", arxiv → "archive",
+  …), seeded from the spec's examples and a scan of published scripts.
+  - `check_pronunciation.py` now detects a core set of lowercase technical terms
+    (`_CORE_RISKY_TERMS`) plus the lexicon keys, and a detected term is covered
+    only if it has a non-empty spoken form in the lexicon or the pronunciation
+    cache. The tmux-class whole-episode mispronunciation can no longer pass QA.
+  - `_omnivoice_fixups` substitutes the spoken form into the text sent to
+    OmniVoice (the proven tmux-incident fix, generalized to the whole lexicon),
+    so detection actually reaches synthesis — case-insensitively, longest-term
+    first.
+
+### Tests added
+- `tests/test_pronunciation_lexicon.py` — 9 tests: detection of lowercase terms,
+  coverage pass, **remove-one-entry → fail** (known-bad twin), empty spoken form,
+  and substitution reaching the TTS-bound text (case-insensitive). The shipped
+  lexicon is asserted wired into the fixups list.
+
+### Acceptance criteria — met
+- Script with tmux/nginx/kubectl + lexicon entries → check passes and TTS text
+  contains the spoken forms ✅
+- Remove one entry → check fails naming the term ✅
+- Full suite: 155 passed, 1 skipped ✅

@@ -1652,9 +1652,23 @@ def _trim_segment_audio(wav, sr, *, thresh_db=-40.0, keep_ms=30,
 
 # Literal pre-TTS fixups for the OmniVoice path (engine reads these better than
 # the raw form). Grow empirically from verification listen-throughs.
-_OMNI_TEXT_FIXUPS = [
-    ("tmux", "tee-mux"),
-]
+def _load_risky_lexicon():
+    """Load the lowercase risky-term → spoken-form map (shared with the
+    pronunciation check) so detection and synthesis use the same source (P2.1)."""
+    try:
+        from checks.check_pronunciation import load_risky_lexicon
+        return load_risky_lexicon()
+    except Exception:
+        return {}
+
+
+# Curated lowercase technical terms → spoken forms. A cache IPA entry is not the
+# same as a spoken-form substitution in the text sent to the TTS, so for these
+# terms we substitute the spoken form directly — the proven tmux-incident fix,
+# generalized to the whole risky lexicon (P2.1).
+_OMNI_TEXT_FIXUPS = sorted(
+    _load_risky_lexicon().items(), key=lambda kv: len(kv[0]), reverse=True
+) or [("tmux", "tee mux")]
 
 # Adjacent-number separator: when a version number is followed immediately by a
 # size/parameter count, insert a comma so the two numbers don't bind in TTS.
@@ -1671,7 +1685,7 @@ _RE_ADJ_NUM = re.compile(
 
 def _omnivoice_fixups(text):
     for needle, repl in _OMNI_TEXT_FIXUPS:
-        text = re.sub(rf'\b{re.escape(needle)}\b', repl, text)
+        text = re.sub(rf'\b{re.escape(needle)}\b', repl, text, flags=re.IGNORECASE)
     # Separate a version number from an immediately-following size, so two
     # numbers don't bind ("Gemma four twelve billion" -> "Gemma four, twelve billion").
     text = _RE_ADJ_NUM.sub(r"\1, \2", text)

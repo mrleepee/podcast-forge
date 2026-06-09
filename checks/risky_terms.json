@@ -1,0 +1,21 @@
+{
+  "tmux": "tee-mux",
+  "nginx": "engine-X",
+  "systemd": "system-D",
+  "kubectl": "cube-control",
+  "kubernetes": "koober-netties",
+  "ffmpeg": "F-F-M-peg",
+  "pytest": "pie-test",
+  "pytorch": "pie-torch",
+  "numpy": "num-pie",
+  "jupyter": "joopiter",
+  "grpc": "G-R-P-C",
+  "sqlite": "sequel-light",
+  "postgres": "post-gress",
+  "postgresql": "post-gress-Q-L",
+  "redis": "red-iss",
+  "cuda": "kooda",
+  "oauth": "oh-auth",
+  "arxiv": "archive",
+  "webassembly": "web-assembly"
+}

@@ -34,6 +34,33 @@ FALSE_POSITIVES = frozenset({
     "AM", "PM",
 })
 
+# Curated spoken-form lexicon for lowercase technical terms (tmux → "tee mux").
+_RISKY_LEXICON_PATH = Path(__file__).parent / "risky_terms.json"
+
+# Lowercase technical terms a TTS engine reliably mangles ("tmux" spoken as
+# "t-max" shipped a whole episode). ALL-CAPS detection never sees these, so the
+# coverage check passed while the TTS guessed. These are always detected when
+# present; each must have a spoken form in risky_terms.json or the pronunciation
+# cache, or the check fails (P2.1).
+_CORE_RISKY_TERMS = frozenset({
+    "tmux", "nginx", "systemd", "kubectl", "kubernetes", "ffmpeg", "pytest",
+    "pytorch", "numpy", "jupyter", "grpc", "sqlite", "postgres", "postgresql",
+    "redis", "cuda", "oauth", "arxiv", "webassembly",
+})
+
+
+def load_risky_lexicon(path=None) -> dict:
+    """Load the lowercase risky-term → spoken-form map (P2.1)."""
+    path = Path(path) if path else _RISKY_LEXICON_PATH
+    if path.exists():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+        except json.JSONDecodeError:
+            pass
+    return {}
+
 
 @dataclass
 class CheckResult:
@@ -46,11 +73,12 @@ class CheckResult:
         return self.passed
 
 
-def detect_risky_tokens(text: str) -> set[str]:
+def detect_risky_tokens(text: str, extra_terms=None) -> set[str]:
     """Find all pronunciation-risky tokens in a script.
 
-    Detects: ALL-CAPS acronyms, alphanumeric codes (x402),
-    HTTP status patterns, and ISO currency codes.
+    Detects: ALL-CAPS acronyms, alphanumeric codes (x402), HTTP status patterns,
+    ISO currency codes, and lowercase technical terms (tmux, nginx, …) from the
+    core risky set plus any ``extra_terms`` (e.g. the loaded lexicon keys) (P2.1).
     """
     tokens = set()
 
@@ -67,6 +95,14 @@ def detect_risky_tokens(text: str) -> set[str]:
 
     for m in _RE_CURRENCY.finditer(text):
         tokens.add(m.group(1))
+
+    detect_terms = set(_CORE_RISKY_TERMS)
+    if extra_terms:
+        detect_terms |= {str(t).lower() for t in extra_terms}
+    low = text.lower()
+    for term in detect_terms:
+        if re.search(rf'\b{re.escape(term)}\b', low):
+            tokens.add(term)
 
     return tokens
 
@@ -88,7 +124,8 @@ def run(fixture: dict) -> CheckResult:
     if not script_text:
         return CheckResult(passed=False, reason="empty script")
 
-    risky = detect_risky_tokens(script_text)
+    lexicon = load_risky_lexicon(fixture.get("risky_lexicon_path"))
+    risky = detect_risky_tokens(script_text, extra_terms=lexicon.keys())
     if not risky:
         return CheckResult(
             passed=True,
@@ -96,9 +133,12 @@ def run(fixture: dict) -> CheckResult:
             metrics={"risky_count": 0},
         )
 
-    # Case-insensitive coverage check
+    # Case-insensitive coverage: a token is covered by the pronunciation cache or
+    # by a non-empty spoken form in the risky-term lexicon (P2.1).
     cache_lower = {k.lower() for k in load_pronunciation_cache()}
-    uncovered = {t for t in risky if t.lower() not in cache_lower}
+    lexicon_lower = {k.lower() for k, v in lexicon.items() if str(v).strip()}
+    covered = cache_lower | lexicon_lower
+    uncovered = {t for t in risky if t.lower() not in covered}
 
     metrics = {
         "risky_count": len(risky),
