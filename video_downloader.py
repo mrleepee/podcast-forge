@@ -1,5 +1,4 @@
 import argparse
-import yt_dlp
 import subprocess
 import os
 import sys
@@ -8,8 +7,12 @@ import re
 import shutil
 import urllib.parse
 from pathlib import Path
-from yt_dlp.cookies import CookieLoadError, SUPPORTED_BROWSERS, SUPPORTED_KEYRINGS
-from yt_dlp.utils import DownloadError
+
+# NOTE: yt_dlp is imported lazily inside the download functions
+# (parse_browser_cookie_spec, get_video_info, download_video) so this 4,000-line
+# module stays importable without yt_dlp installed — for the test suite and for
+# the pipeline-only entry points (synthesis, quality gate, publishing) that never
+# download. See checks/run.py and tests/.
 
 
 # ---------------------------------------------------------------------------
@@ -158,6 +161,11 @@ def parse_arguments():
         help="Two-speaker conversational podcast with distinct voices (used with --podcast).",
     )
     parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Bypass the fail-closed similarity/sponsorship gates (manual override).",
+    )
+    parser.add_argument(
         "--vimeo-hash",
         metavar="HASH",
         help=(
@@ -259,6 +267,7 @@ def browser_has_likely_profile(browser_name):
 
 
 def parse_browser_cookie_spec(value):
+    from yt_dlp.cookies import SUPPORTED_BROWSERS, SUPPORTED_KEYRINGS
     normalized = (value or "").strip()
     if not normalized:
         raise ValueError("Please provide a browser name for --cookies-from-browser.")
@@ -297,6 +306,7 @@ def parse_browser_cookie_spec(value):
 
 
 def expand_browser_cookie_sources(value):
+    from yt_dlp.cookies import SUPPORTED_BROWSERS
     normalized = (value or "").strip()
     if not normalized:
         return []
@@ -574,6 +584,9 @@ def get_video_info(
     js_runtimes=None,
     remote_components=None,
 ):
+    import yt_dlp
+    from yt_dlp.cookies import CookieLoadError
+    from yt_dlp.utils import DownloadError
     clients = get_active_youtube_clients(url_attempts, youtube_clients)
     cookie_sources = prioritize_cookie_sources(
         browser_cookie_sources,
@@ -855,6 +868,9 @@ def download_video(
     js_runtimes=None,
     remote_components=None,
 ):
+    import yt_dlp
+    from yt_dlp.cookies import CookieLoadError
+    from yt_dlp.utils import DownloadError
     url_attempts = build_url_attempts(url, vimeo_hash=vimeo_hash)
     active_youtube_clients = get_active_youtube_clients(url_attempts, youtube_clients)
     cookie_sources = prioritize_cookie_sources(
@@ -2121,6 +2137,15 @@ _VECTORIZER_PATH = _PODCAST_REPO / "episode_vectorizer.pkl"
 _VECTOR_SLUGS_PATH = _PODCAST_REPO / "episode_vector_slugs.json"
 _SIMILARITY_THRESHOLD = 0.20
 
+# Queue of episodes that a fail-closed gate (similarity / sponsorship) skipped in
+# non-interactive runs, so a human can review them later (P0.3).
+_SKIPPED_QUEUE = _PODCAST_REPO / "skipped-pending-review.json"
+
+# Allowlist consulted by the publish gate: {slug: reason}. Episodes here are
+# published even without a passing quality report (e.g. legacy/grandfathered
+# episodes, or a deliberate manual override) (P0.2).
+_PUBLISH_OVERRIDES = _PODCAST_REPO / "publish_overrides.json"
+
 
 def _slugify(text, max_words=8):
     """Create a URL-safe slug from text."""
@@ -2363,6 +2388,12 @@ def _run_evidence_pipeline(summary_text, clean_name, podcast_path,
     artifacts_dir = podcast_path / clean_name
     artifacts_dir.mkdir(parents=True, exist_ok=True)
 
+    # Load the persona once, unconditionally. On the resume path (outline and
+    # script artifacts already exist) this used to stay unbound, so QA revisions
+    # re-drafted without SOUL.md and lost the persona (P1.3).
+    soul_path = Path(__file__).parent / "SOUL.md"
+    soul_text = soul_path.read_text(encoding="utf-8") if soul_path.exists() else ""
+
     # Stage 1: Evidence extraction
     print("  Stage 1: Extracting evidence...")
     evidence_path = artifacts_dir / "evidence_map.json"
@@ -2387,8 +2418,6 @@ def _run_evidence_pipeline(summary_text, clean_name, podcast_path,
         outline = _json.loads(outline_path.read_text(encoding="utf-8"))
     else:
         from pipeline_stages import generate_outline
-        soul_path = Path(__file__).parent / "SOUL.md"
-        soul_text = soul_path.read_text(encoding="utf-8") if soul_path.exists() else ""
         outline = generate_outline(evidence, soul_text)
         outline_path.write_text(_json.dumps(outline, indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"    Outline generated → {outline_path.name}")
@@ -2403,8 +2432,6 @@ def _run_evidence_pipeline(summary_text, clean_name, podcast_path,
         en_narrative = en_txt.read_text(encoding="utf-8")
     else:
         from pipeline_stages import draft_script
-        soul_path = Path(__file__).parent / "SOUL.md"
-        soul_text = soul_path.read_text(encoding="utf-8") if soul_path.exists() else ""
         en_narrative = draft_script(
             outline, evidence, soul_text,
             video_title=video_title, extra_prompt=extra_prompt,
@@ -2417,12 +2444,13 @@ def _run_evidence_pipeline(summary_text, clean_name, podcast_path,
         en_txt.write_text(en_narrative, encoding="utf-8")
         print(f"    Script saved: {en_txt.name}")
 
-    # Stage 4: Content QA (with revision loop)
+    # Stage 4: Content QA (with revision loop). The loop may rewrite the script;
+    # reassign en_narrative so the opening check (4b), verification (4c), and audio
+    # (5) all run on the *revised* text rather than the stale original (P0.1).
     print("  Stage 4: Content QA...")
-    _run_qa_revision_loop(en_narrative, en_txt, outline, evidence,
-                          soul_text if 'soul_text' in dir() else "",
-                          video_title, extra_prompt, target_words, duo,
-                          max_revisions=3)
+    en_narrative = _run_qa_revision_loop(en_narrative, en_txt, outline, evidence,
+                                         soul_text, video_title, extra_prompt,
+                                         target_words, duo, max_revisions=3)
 
     # Stage 4b: Opening sentence freshness check
     try:
@@ -2536,18 +2564,23 @@ def _run_verification_stage(script_text: str, evidence: list[dict],
 def _run_qa_revision_loop(script_text, script_path, outline, evidence,
                           soul_text, video_title, extra_prompt, target_words, duo,
                           max_revisions=3):
-    """Run content QA and revise script up to max_revisions times."""
+    """Run content QA and revise script up to max_revisions times.
+
+    Returns the final script text — the last accepted revision if the loop
+    revised, otherwise the original. Callers MUST use the return value so the
+    revised draft reaches verification, the opening check, and audio (P0.1).
+    """
     try:
         from checks.quality_gate import run_quality_gate
     except ImportError:
         print("    Quality gate not available, skipping QA loop.")
-        return
+        return script_text
 
     for attempt in range(max_revisions):
         report = run_quality_gate(script_text)
         if report.passed:
             print(f"    QA passed on attempt {attempt + 1}")
-            return
+            return script_text
         print(f"    QA failed (attempt {attempt + 1}/{max_revisions}):")
         for f in report.blocking_failures[:3]:
             print(f"      - {f}")
@@ -2570,10 +2603,10 @@ def _run_qa_revision_loop(script_text, script_path, outline, evidence,
 
     print(f"    QA exhausted after {max_revisions} revisions, proceeding with best draft")
     qa_report_path = script_path.parent / f"{script_path.stem}.quality_report.json"
-    import json
     from checks.quality_gate import write_quality_report
     report.checks["qa_exhausted"] = True
     write_quality_report(report, qa_report_path)
+    return script_text
 
 
 def _run_quality_gate(episode_slug, script_path, audio_path, podcast_dir):
@@ -2601,12 +2634,42 @@ def _run_quality_gate(episode_slug, script_path, audio_path, podcast_dir):
     return report.passed
 
 
+def _queue_skipped_episode(clean_name, video_title, gate, detail, queue_path=None):
+    """Append a fail-closed gate skip to the review queue (P0.3).
+
+    Production runs non-interactively (scheduled tasks), so a tripped similarity
+    or sponsorship gate can't prompt a human. Instead of proceeding anyway we
+    record the episode here for later review and move on to the next backlog item.
+    """
+    from datetime import datetime, timezone
+    queue_path = Path(queue_path) if queue_path else _SKIPPED_QUEUE
+    try:
+        queue = json.loads(queue_path.read_text(encoding="utf-8")) if queue_path.exists() else []
+    except (json.JSONDecodeError, OSError):
+        queue = []
+    if not isinstance(queue, list):
+        queue = []
+    queue.append({
+        "clean_name": clean_name,
+        "title": video_title,
+        "gate": gate,
+        "detail": detail,
+        "skipped_at": datetime.now(tz=timezone.utc).isoformat(),
+    })
+    try:
+        queue_path.write_text(json.dumps(queue, indent=2, ensure_ascii=False), encoding="utf-8")
+    except OSError as e:
+        print(f"  Could not write review queue {queue_path.name}: {e}")
+    return queue_path
+
+
 def produce_podcast(summary_path, video_title="", podcast_dir=None,
                     extra_prompt="", video_duration_seconds=0, duo=False,
-                    pipeline="summary"):
+                    pipeline="summary", force=False):
     """Full podcast pipeline: summary → narrate → TTS → MP3 (English + Spanish).
 
     pipeline: "summary" (default) or "evidence" for the evidence-first path.
+    force:    bypass the fail-closed similarity/sponsorship gates (manual override).
     """
     if podcast_dir is None:
         podcast_dir = _AUDIO_DIR
@@ -2630,7 +2693,9 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
         score, reason = result
         print(f"\n  WARNING: Sponsored content detected (score: {score}/10)")
         print(f"  Reason: {reason}")
-        if sys.stdin.isatty():
+        if force:
+            print("  (--force — proceeding despite sponsorship gate)")
+        elif sys.stdin.isatty():
             try:
                 answer = input("  Proceed anyway? [y/N] ").strip().lower()
             except (EOFError, KeyboardInterrupt):
@@ -2639,13 +2704,21 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
                 print("  Skipping podcast production.")
                 return None
         else:
-            print("  (non-interactive mode — proceeding anyway)")
+            # Fail closed: production is non-interactive, so don't ship a likely
+            # ad. Queue it for review and move on to the next backlog item (P0.3).
+            queue = _queue_skipped_episode(
+                clean_name, video_title, "sponsorship",
+                {"score": score, "reason": reason})
+            print(f"  Non-interactive: skipped pending review → {queue.name}")
+            return None
 
     # --- Similarity check ---
     sim_matches = _check_episode_similarity(summary_text, video_title or "")
     if sim_matches:
         _display_similarity_table(sim_matches)
-        if sys.stdin.isatty():
+        if force:
+            print("  (--force — proceeding despite similarity gate)")
+        elif sys.stdin.isatty():
             try:
                 answer = input("\n  Episode may be a duplicate. Proceed anyway? [y/N] ").strip().lower()
             except (EOFError, KeyboardInterrupt):
@@ -2654,9 +2727,20 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
                 print("  Skipping podcast production.")
                 return None
         else:
-            print("  (non-interactive mode — proceeding anyway)")
+            # Fail closed: likely duplicate and no human to confirm. Queue with the
+            # match table so a reviewer can see exactly what it collided with (P0.3).
+            queue = _queue_skipped_episode(
+                clean_name, video_title, "similarity",
+                {"matches": sim_matches})
+            print(f"  Non-interactive: skipped pending review → {queue.name}")
+            return None
     else:
         print("  Similarity check passed.")
+
+    # Resolve the audio generator once, before the pipeline branch. The evidence
+    # path never set it, so a non-bilingual Spanish narration later raised
+    # NameError after the (expensive) English production had already run (P1.1).
+    _gen_fn = _generate_duo_audio if duo else _generate_podcast_audio
 
     # --- Evidence-first pipeline ---
     if pipeline == "evidence":
@@ -2693,7 +2777,6 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
                 en_txt.write_text(en_narrative, encoding="utf-8")
                 print(f"  English narration saved: {en_txt.name}")
 
-            _gen_fn = _generate_duo_audio if duo else _generate_podcast_audio
             if not _gen_fn(en_narrative, en_mp3, lang="en"):
                 return None
 
@@ -2849,17 +2932,49 @@ def _upload_file_gh_api(repo_path, local_file, remote_path):
     return True
 
 
+def _run_publish_gate(audio_dir=None, overrides_path=None):
+    """Evaluate every produced episode and report which may be published (P0.2).
+
+    Returns the :class:`PublishGateResult`. Episodes without a passing quality
+    report (and not allowlisted) are printed as a ``needs-review`` list and their
+    slugs returned in ``blocked_slugs`` so the feed can exclude them.
+    """
+    audio_dir = Path(audio_dir) if audio_dir else _AUDIO_DIR
+    overrides_path = overrides_path or _PUBLISH_OVERRIDES
+    try:
+        from checks.publish_gate import run_publish_gate
+    except ImportError:
+        print("  Publish gate not available (checks/ not found). Publishing all.")
+        return None
+
+    gate = run_publish_gate(audio_dir, overrides_path=overrides_path)
+    overrides_count = sum(1 for v in gate.publishable if v.overridden)
+    print(f"  Publish gate: {len(gate.publishable)} publishable "
+          f"({overrides_count} allowlisted), {len(gate.needs_review)} need review.")
+    for v in gate.needs_review:
+        print(f"    ✗ {v.slug}: {v.reason}")
+    return gate
+
+
 def publish_feed():
     """Regenerate RSS feed and push to GitHub."""
     print("\nPublishing to feed...")
+
+    # Publish gate: nothing ships unless it earned it (P0.2). Failing episodes are
+    # excluded from the feed and not uploaded; the rest publish as usual.
+    gate = _run_publish_gate()
+    excluded = list(gate.blocked_slugs) if gate else []
+
     generate_rss = _PODCAST_REPO / "generate_rss.py"
-    result = subprocess.run(
-        [sys.executable, str(generate_rss),
-         "--base-url", "https://mrleepee.github.io/freeist-podcast/audio/",
-         "--title", "Señora Freedom",
-         "--output", str(_RSS_OUTPUT)],
-        capture_output=True, text=True,
-    )
+    rss_cmd = [
+        sys.executable, str(generate_rss),
+        "--base-url", "https://mrleepee.github.io/freeist-podcast/audio/",
+        "--title", "Señora Freedom",
+        "--output", str(_RSS_OUTPUT),
+    ]
+    if excluded:
+        rss_cmd += ["--exclude", *excluded]
+    result = subprocess.run(rss_cmd, capture_output=True, text=True)
     if result.returncode != 0:
         print(f"RSS generation failed: {result.stderr}")
         return False
@@ -2887,6 +3002,8 @@ def publish_feed():
         audio_dir = _PUBLISH_REPO / "audio"
         # Upload any new audio/ files via API
         for f in audio_dir.glob("ep*.podcast.mp3"):
+            if f.name[: -len(".podcast.mp3")] in excluded:
+                continue  # publish gate blocked this episode — don't upload it
             # Check if file exists on remote
             check = subprocess.run(
                 ["gh", "api", f"repos/mrleepee/freeist-podcast/contents/audio/{f.name}",
@@ -2906,6 +3023,12 @@ def publish_feed():
         subprocess.run(["git", "reset", "--hard", "origin/main"], cwd=_PUBLISH_REPO, capture_output=True)
     else:
         print("Feed pushed to GitHub.")
+
+    if gate and gate.needs_review:
+        print(f"\n  ⚠️  {len(gate.needs_review)} episode(s) held back, needs-review:")
+        for v in gate.needs_review:
+            print(f"    - {v.slug}: {v.reason}")
+        print(f"  Allowlist in {_PUBLISH_OVERRIDES.name} to publish anyway.")
     return True
 
 
@@ -3041,7 +3164,7 @@ def main():
                     produce_podcast(summary_path, video_title="",
                                     extra_prompt=args.prompt or "",
                                     video_duration_seconds=vid_dur,
-                                    duo=args.duo)
+                                    duo=args.duo, force=args.force)
             print()
     else:
         url = args.url
@@ -3086,7 +3209,7 @@ def main():
                 produce_podcast(summary_path, video_title=args.title or "",
                                 extra_prompt=args.prompt or "",
                                 video_duration_seconds=vid_dur,
-                                duo=args.duo)
+                                duo=args.duo, force=args.force)
 
 
 if __name__ == "__main__":
