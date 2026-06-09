@@ -65,17 +65,25 @@ def load_episode_metadata(metadata_path):
     return {}
 
 
-def find_podcast_episodes(downloads_dir, metadata=None, suffix=".podcast.mp3"):
-    """Find podcast MP3 files with their metadata."""
+def find_podcast_episodes(downloads_dir, metadata=None, suffix=".podcast.mp3", exclude=None):
+    """Find podcast MP3 files with their metadata.
+
+    ``exclude`` is an optional set/list of episode stems (slugs) to omit — used
+    by the publish gate to keep failing episodes out of the feed.
+    """
     downloads = Path(downloads_dir)
     if not downloads.exists():
         print(f"Error: {downloads_dir} not found")
         sys.exit(1)
 
+    exclude = set(exclude or [])
     metadata = metadata or {}
     episodes = []
     for mp3_path in sorted(downloads.glob(f"*{suffix}")):
         stem = mp3_path.name[: -len(suffix)]
+        if stem in exclude:
+            print(f"  Excluded by publish gate: {stem}")
+            continue
         meta = metadata.get(stem, {})
 
         title = meta.get("title", re.sub(r"^ep\d+\s*", "", stem.replace("-", " ")).strip().title())
@@ -175,10 +183,13 @@ def main():
                         help="Episode metadata JSON file")
     parser.add_argument("--suffix", default=".podcast.mp3",
                         help="File suffix to scan for (default: .podcast.mp3)")
+    parser.add_argument("--exclude", nargs="*", default=[],
+                        help="Episode slugs to exclude from the feed (publish gate)")
     args = parser.parse_args()
 
     metadata = load_episode_metadata(args.metadata)
-    episodes = find_podcast_episodes(args.downloads, metadata=metadata, suffix=args.suffix)
+    episodes = find_podcast_episodes(args.downloads, metadata=metadata,
+                                     suffix=args.suffix, exclude=args.exclude)
     if not episodes:
         print(f"No .podcast.mp3 files found in {args.downloads}/")
         sys.exit(1)

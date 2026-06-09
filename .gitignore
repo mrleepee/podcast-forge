@@ -11,3 +11,5 @@ episode_vector_slugs.json
 __pycache__/
 *.pyc
 .tmp_*.json
+# Runtime review queue written by the fail-closed gates (P0.3)
+skipped-pending-review.json
