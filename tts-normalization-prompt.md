@@ -126,6 +126,19 @@ are read digit-by-digit ("four oh two"); version-style numbers use "point".
 - `0.5` → `zero point five` or `a half`
 - `-7` → `negative seven`
 
+**Adjacent numbers in model/product names:** When a version number is immediately
+followed by a size or parameter count (two number words adjacent), separate them
+with a comma so the TTS engine reads them as two distinct numbers:
+
+- `Gemma 4 12B` → `Gemma four, twelve billion parameters`
+- `GPT 4 100` → `GPT four, one hundred`
+- `Llama 3 70B` → `Llama three, seventy billion parameters`
+
+Do NOT insert a comma when the numbers form a natural compound (magnitudes):
+- `two hundred thousand` → unchanged
+- `twenty twenty-six` (year) → unchanged
+- `twelve billion` (single number + magnitude) → unchanged
+
 ### 4. Currency
 
 - `$10` → `ten dollars`
