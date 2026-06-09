@@ -240,17 +240,27 @@ def verify_script(script_text: str, evidence: list[dict]) -> dict:
 
     match = re.search(r"\[.*\]", response, re.DOTALL)
     if not match:
-        # No JSON array at all — treat as "nothing flagged".
-        claims: list[dict] = []
-    else:
-        try:
-            parsed = json.loads(match.group(0))
-        except json.JSONDecodeError as e:
-            raise ValueError(
-                f"Verifier returned unparseable report "
-                f"(first 200 chars: {response[:200]})"
-            ) from e
-        claims = parsed if isinstance(parsed, list) else []
+        # No JSON array at all — the verifier returned prose, not a verdict.
+        # This is NOT a clean bill of health: verification did not actually run.
+        # Report a distinct error status with passed=False so the publish gate
+        # treats it as "verification not performed", not as a pass (P1.2).
+        return {
+            "claims": [],
+            "high_confidence": 0,
+            "threshold": _VERIFICATION_THRESHOLD,
+            "passed": False,
+            "status": "error",
+            "error": "verifier returned no JSON array (response was not a verdict)",
+        }
+
+    try:
+        parsed = json.loads(match.group(0))
+    except json.JSONDecodeError as e:
+        raise ValueError(
+            f"Verifier returned unparseable report "
+            f"(first 200 chars: {response[:200]})"
+        ) from e
+    claims = parsed if isinstance(parsed, list) else []
 
     high_confidence = sum(1 for c in claims if c.get("confidence") == "high")
     return {
@@ -258,6 +268,7 @@ def verify_script(script_text: str, evidence: list[dict]) -> dict:
         "high_confidence": high_confidence,
         "threshold": _VERIFICATION_THRESHOLD,
         "passed": high_confidence <= _VERIFICATION_THRESHOLD,
+        "status": "ok",
     }
 
 

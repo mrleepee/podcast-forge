@@ -16,7 +16,7 @@ it earned it*.
 | Phase | Scope | Status |
 |-------|-------|--------|
 | **1 — Close the loop** | P0.1, P0.2, P0.3, P1.1, P1.3, lazy `yt_dlp` import | ✅ done |
-| 2 — Bugs & registry | P1.2 (verifier `error` status), P1.4 (episode-number registry) | ⬜ pending |
+| **2 — Bugs & registry** | P1.2 (verifier `error` status), P1.4 (episode-number registry) | ✅ done |
 | 3 — Pronunciation | P2.1 (lowercase risky-lexicon + spoken-form substitution) | ⬜ pending |
 | 4 — Audio integrity | P2.2 (ref-clip hard-fail + Phase 4 QC harness) | ⬜ pending |
 | 5 — Spanish track | P2.3 (gate vs drop — **decision deferred by owner**) | ⬜ pending |
@@ -69,5 +69,34 @@ it earned it*.
 - `checks/run.py` has **pre-existing** failures (`tech-jargon` substance,
   audio-less loudness fixtures) unrelated to this phase — to be addressed in a
   later hygiene phase. The pytest suite is green.
-- The publish gate treats a *missing* verification report as non-blocking; P1.2
-  (Phase 2) tightens this to "verification not performed" ≠ pass.
+
+## Phase 2 — Bugs & registry (done)
+
+**Branch:** `feature/pipeline-integrity-phase2-verifier-numbering`
+
+### What's included
+- **P1.2** — `verify_script` now returns a `status` field. A verifier response
+  with no JSON array (prose, not a verdict) returns `status: "error"`,
+  `passed: false` instead of silently reporting "all claims traceable ✓".
+  `_run_verification_stage` records a failing report for both the no-array and
+  unparseable-JSON cases, and the publish gate treats it as "verification not
+  performed", not a pass.
+- **P1.4** — `_next_episode_number` derives the next number from the **union** of
+  the local audio dir and the publish repo's `episodes.json`, so a local dir out
+  of sync with the feed can't reissue a published number. The publish gate gained
+  a duplicate-number assertion (`find_duplicate_numbers`): two episodes sharing an
+  `epNN` are both held back unless allowlisted (the 6 legacy duplicates —
+  ep65/66/70/73/94/122 — are grandfathered).
+
+### Tests added
+- `tests/test_numbering_and_verifier.py` — 12 tests: numbering union, duplicate
+  detection + gate blocking + override admission, verification error→block,
+  `_run_verification_stage` error-report writing — each with a known-bad twin.
+- `tests/test_verification.py` — updated `test_no_array_means_nothing_flagged`
+  (which encoded the P1.2 bug) to assert the corrected error status.
+
+### Acceptance criteria — met
+- Local dir at ep127 + episodes.json with ep128 → next is 129 ✅
+- Gate fails on a feed fixture with a duplicated number ✅
+- Verifier prose response → report status `error`, not `passed: true` ✅
+- Full suite: 146 passed, 1 skipped ✅
