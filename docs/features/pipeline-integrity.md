@@ -21,7 +21,7 @@ it earned it*.
 | **4 — Audio integrity** | P2.2 (ref-clip hard-fail + Phase 4 QC harness) | ✅ done (re-cut = open asset task) |
 | 5 — Spanish track | P2.3 (gate vs drop — **decision deferred by owner**) | ⏸ deferred (needs decision) |
 | **6 — Distribution** | P3 (stable GUIDs, itunes:image/type, owner email, transcripts) | ✅ done |
-| 7 — Hygiene | remaining P4 items | ⬜ pending |
+| **7 — Hygiene** | remaining P4 items + `checks/run.py` green | ✅ done |
 
 ---
 
@@ -208,3 +208,52 @@ script/MP3, or stop producing the ES track. Deferred per owner ("decide later").
 - Every item with a transcript carries a resolving `podcast:transcript` URL ✅
 - Full live feed parses as valid XML ✅
 - Full suite: 183 passed, 1 skipped ✅
+
+## Phase 7 — Hygiene (done)
+
+**Branch:** `feature/pipeline-integrity-phase7-hygiene`
+
+### What's included
+- **P4.2 — opening check is a revision trigger, not a shrug.** `_run_qa_revision_loop`
+  now re-drafts when the quality gate fails **or** the opening is stale
+  (`_check_opening_freshness`, best-effort). `draft_script` already injects the
+  avoidance prompt.
+- **P4.3 — verify the feed landed.** After the API-fallback `git reset --hard`,
+  `_verify_feed_landed` fetches the remote `rss/feed.xml` and compares it to the
+  local copy, warning loudly if the push didn't actually land.
+- **P4.4 — LUFS in `episodes.json`.** `_record_episode_lufs` persists the measured
+  integrated loudness per episode so the feed work can expose it.
+- **`checks/run.py` green.** `run.py` skips audio-dependent checks for script-only
+  good fixtures (mirroring how `quality_gate` skips loudness without audio), and
+  the `tech-jargon` good fixture gained real numeric substance. Total: PASS.
+- (P4 lazy `yt_dlp` import already shipped in Phase 1.)
+
+### Tests added
+- `tests/test_hygiene.py` — 10 tests: stale-opening forces redraft vs fresh-opening
+  no redraft (known-bad twin) + best-effort safety; feed verification match /
+  mismatch / API-error / missing-local; LUFS write / none-noop / create-entry.
+
+### Acceptance criteria — met
+- Stale opening triggers a revision; fresh opening does not ✅
+- `_verify_feed_landed` true on match, false on mismatch/error ✅
+- `_record_episode_lufs` writes rounded LUFS, preserves other fields ✅
+- `python -m checks.run` → Total: PASS ✅
+- Full suite: 193 passed, 1 skipped ✅
+
+---
+
+## Definition of done — met
+
+- `python -m checks.run` green ✅
+- New end-to-end pipeline test (0.1), publish-gate fixtures (0.2), non-interactive
+  gate fixtures (0.3), pronunciation lexicon fixture (2.1) — each with a known-bad
+  twin ✅
+- The publish gate contract from `podcast-quality-plan.md` is true: nothing ships
+  unless it earned it ✅
+
+### Remaining (owner action, not code)
+- **Spanish track (P2.3)** decision: gate or drop — Phase 5 deferred.
+- **Re-cut the OmniVoice reference clip**, then enable `OMNIVOICE_REF_STRICT=1`
+  (Phase 4 open asset task; see `voice_ref/README.md`).
+- **Host `cover.png`** + set `PODCAST_OWNER_EMAIL` to complete the feed metadata
+  (Phase 6 open asset task).
