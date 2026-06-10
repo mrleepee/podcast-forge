@@ -18,7 +18,7 @@ it earned it*.
 | **1 — Close the loop** | P0.1, P0.2, P0.3, P1.1, P1.3, lazy `yt_dlp` import | ✅ done |
 | **2 — Bugs & registry** | P1.2 (verifier `error` status), P1.4 (episode-number registry) | ✅ done |
 | **3 — Pronunciation** | P2.1 (lowercase risky-lexicon + spoken-form substitution) | ✅ done |
-| 4 — Audio integrity | P2.2 (ref-clip hard-fail + Phase 4 QC harness) | ⬜ pending |
+| **4 — Audio integrity** | P2.2 (ref-clip hard-fail + Phase 4 QC harness) | ✅ done (re-cut = open asset task) |
 | 5 — Spanish track | P2.3 (gate vs drop — **decision deferred by owner**) | ⬜ pending |
 | 6 — Distribution | P3 (stable GUIDs, itunes:image/type, owner email, transcripts) | ⬜ pending |
 | 7 — Hygiene | remaining P4 items | ⬜ pending |
@@ -129,3 +129,39 @@ it earned it*.
   contains the spoken forms ✅
 - Remove one entry → check fails naming the term ✅
 - Full suite: 155 passed, 1 skipped ✅
+
+## Phase 4 — Audio integrity (done; re-cut is an open asset task)
+
+**Branch:** `feature/pipeline-integrity-phase4-refclip-qc`
+
+### What's included
+- **P2.2 part 2 — ref-clip hard-fail.** `_blocking_ref_warnings` classifies the
+  mid-speech / length-mismatch / silent / unreadable conditions as fatal. When
+  `OMNIVOICE_REF_STRICT` is on, `_omnivoice_render` aborts rather than cloning
+  every chunk against a misaligned reference. **Defaults OFF** because the shipped
+  clip is currently defective (ends mid-speech, 0 ms trailing) and re-cutting it
+  is a human asset task — turning strict on first would halt production. The loud
+  "RE-CUT" warning still prints every run.
+- **P2.2 part 3 — Phase 4 QC harness.** New standalone `checks/seam_qc.py`
+  (not wired into `run.py`; whisperx is OmniVoice-venv-only, injected via a
+  callback): reports peak energy at each segment seam (clean < −60 dBFS) and
+  flags a token recurring at the start of ≥ 30 % of segments (the echo
+  signature, requiring count ≥ 2). Exit 0 clean / 2 artifact.
+- **Docs.** `voice_ref/README.md` with the re-cut instructions; omnivoice spec
+  status corrected to reflect Phases 1–4 shipped.
+
+### Tests added
+- `tests/test_refclip_and_seam_qc.py` — 16 tests: blocking-warning classification,
+  strict abort vs non-strict proceed (known-bad twin), `peak_dbfs`, seam energy
+  clean/leaked, echo-signature flag/no-flag, full `run_seam_qc`.
+
+### Open asset task (cannot be done in code)
+- **Re-cut `voice_ref/senora_freedom_en_ref.wav`** to end on a completed sentence
+  with ≥ 150 ms trailing silence (24 kHz mono), update the matching `ref_text`,
+  then set `OMNIVOICE_REF_STRICT=1`. Tracked in `voice_ref/README.md`.
+
+### Acceptance criteria — met
+- `_validate_ref_clip` on the current defective clip → blocking warning; strict
+  render aborts ✅
+- Phase 4 QC flags a leaked token / loud seam; clean render reports none ✅
+- Full suite: 171 passed, 1 skipped ✅
