@@ -19,8 +19,8 @@ it earned it*.
 | **2 — Bugs & registry** | P1.2 (verifier `error` status), P1.4 (episode-number registry) | ✅ done |
 | **3 — Pronunciation** | P2.1 (lowercase risky-lexicon + spoken-form substitution) | ✅ done |
 | **4 — Audio integrity** | P2.2 (ref-clip hard-fail + Phase 4 QC harness) | ✅ done (re-cut = open asset task) |
-| 5 — Spanish track | P2.3 (gate vs drop — **decision deferred by owner**) | ⬜ pending |
-| 6 — Distribution | P3 (stable GUIDs, itunes:image/type, owner email, transcripts) | ⬜ pending |
+| 5 — Spanish track | P2.3 (gate vs drop — **decision deferred by owner**) | ⏸ deferred (needs decision) |
+| **6 — Distribution** | P3 (stable GUIDs, itunes:image/type, owner email, transcripts) | ✅ done |
 | 7 — Hygiene | remaining P4 items | ⬜ pending |
 
 ---
@@ -165,3 +165,46 @@ it earned it*.
   render aborts ✅
 - Phase 4 QC flags a leaked token / loud seam; clean render reports none ✅
 - Full suite: 171 passed, 1 skipped ✅
+
+## Phase 5 — Spanish track (deferred)
+
+P2.3 (gate the ES track vs drop it) needs an owner product decision and is not
+actioned. When decided: either run loudness + structure + pronunciation on the ES
+script/MP3, or stop producing the ES track. Deferred per owner ("decide later").
+
+## Phase 6 — Distribution / RSS (done)
+
+**Branch:** `feature/pipeline-integrity-phase6-rss-distribution`
+
+### What's included (the spec's smallest high-value subset of P3)
+- **Stable GUIDs (R3)** — `<guid>` is now `freeist:<slug>` with
+  `isPermaLink="false"`, independent of the hosting URL. Changing `--base-url` no
+  longer re-creates the whole catalog as duplicates (the G3 bug). This identity is
+  permanent.
+- **Metadata completeness (R2)** — `itunes:type=episodic`, a deterministic
+  show-level `podcast:guid`, channel `<link>`, per-item `itunes:episode` /
+  `itunes:episodeType=full` / `itunes:explicit`, and a configurable owner email
+  (`--owner-email` / `PODCAST_OWNER_EMAIL`, never hardcoded, omitted when unset).
+- **Transcripts (R6)** — `podcast:transcript` linked for every item whose
+  `.podcast.txt` exists on disk (39 of the current catalog); `xmlns:podcast` added.
+- **Show art (R1)** — `itunes:image` + RSS `<image>` emitted when `cover.png` is
+  present in the publish repo (auto-detected); omitted otherwise so the feed never
+  references a 404 image.
+
+### Tests added
+- `tests/test_rss_feed.py` — 12 tests: stable GUID + invariance across base-url,
+  deterministic show GUID, itunes:type, owner-email present/absent, image
+  present/absent, transcript linked/absent, itunes:episode from slug,
+  `find_podcast_episodes` carries stem + transcript flag. Feed round-trips as
+  well-formed XML.
+
+### Open asset task
+- **Host `cover.png`** (1400–3000 px square, existing art) in the publish repo
+  root to light up `itunes:image`. Owner email is config — set
+  `PODCAST_OWNER_EMAIL`.
+
+### Acceptance criteria — met
+- GUIDs unchanged when `--base-url` changes ✅
+- Every item with a transcript carries a resolving `podcast:transcript` URL ✅
+- Full live feed parses as valid XML ✅
+- Full suite: 183 passed, 1 skipped ✅
