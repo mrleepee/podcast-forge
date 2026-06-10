@@ -2430,6 +2430,28 @@ def _next_episode_number(podcast_dir=None, episodes_json=None):
     return highest + 1
 
 
+def _record_episode_lufs(slug, lufs, episodes_json=None):
+    """Persist an episode's measured integrated LUFS into episodes.json (P4.4).
+
+    No-op when there's no measurement. Best-effort: a missing/corrupt registry is
+    left untouched rather than raising.
+    """
+    if lufs is None:
+        return
+    path = Path(episodes_json) if episodes_json else _EPISODES_JSON
+    try:
+        data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(data, dict):
+        return
+    data.setdefault(slug, {})["lufs"] = round(float(lufs), 1)
+    try:
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    except OSError as e:
+        print(f"  Could not record LUFS in {path.name}: {e}")
+
+
 # ---------------------------------------------------------------------------
 # Evidence-first pipeline
 # ---------------------------------------------------------------------------
@@ -2647,10 +2669,26 @@ def _run_verification_stage(script_text: str, evidence: list[dict],
     return result
 
 
+def _check_opening_freshness(script_text):
+    """Return a reason string if the opening is too similar to recent episodes,
+    else None. Best-effort — never raises (P4.2)."""
+    try:
+        from checks.check_opening import run as check_opening
+        log_path = Path(__file__).parent / "checks" / "opening_log.json"
+        result = check_opening({"script_text": script_text}, log_path)
+        return None if result.passed else result.reason
+    except Exception:
+        return None
+
+
 def _run_qa_revision_loop(script_text, script_path, outline, evidence,
                           soul_text, video_title, extra_prompt, target_words, duo,
                           max_revisions=3):
     """Run content QA and revise script up to max_revisions times.
+
+    Revision is triggered by a failing quality gate OR a stale opening (P4.2) —
+    the opening check is no longer a post-hoc shrug; it forces a re-draft, and
+    draft_script already injects the avoidance instruction.
 
     Returns the final script text — the last accepted revision if the loop
     revised, otherwise the original. Callers MUST use the return value so the
@@ -2664,17 +2702,22 @@ def _run_qa_revision_loop(script_text, script_path, outline, evidence,
 
     for attempt in range(max_revisions):
         report = run_quality_gate(script_text)
-        if report.passed:
+        opening_issue = _check_opening_freshness(script_text)
+        if report.passed and not opening_issue:
             print(f"    QA passed on attempt {attempt + 1}")
             return script_text
-        print(f"    QA failed (attempt {attempt + 1}/{max_revisions}):")
-        for f in report.blocking_failures[:3]:
+        issues = list(report.blocking_failures)
+        if opening_issue:
+            issues.append(f"stale opening: {opening_issue}")
+        status = "QA failed" if not report.passed else "opening not fresh"
+        print(f"    {status} (attempt {attempt + 1}/{max_revisions}):")
+        for f in issues[:3]:
             print(f"      - {f}")
 
         if attempt < max_revisions - 1:
             print("    Revising script...")
             from pipeline_stages import draft_script
-            qa_feedback = "Previous draft failed QA: " + "; ".join(report.blocking_failures)
+            qa_feedback = "Previous draft failed QA: " + "; ".join(issues)
             revised = draft_script(
                 outline, evidence, soul_text,
                 video_title=video_title,
@@ -2903,11 +2946,14 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
             print(f"  Intro/outro added: {mp3_path.name}")
 
     # --- Master audio to broadcast loudness (-16 LUFS) ---
+    en_lufs = None
     try:
         from checks.master_audio import master
         for mp3_path in [en_mp3, es_mp3]:
             if mp3_path.exists():
                 result = master(str(mp3_path))
+                if mp3_path == en_mp3:
+                    en_lufs = result.get("integrated_lufs")
                 if result.get("normalised"):
                     print(f"  Mastered: {mp3_path.name} ({result.get('integrated_lufs')} LUFS)")
                 else:
@@ -2916,6 +2962,9 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
         print("  Audio mastering not available (checks/master_audio.py not found).")
     except Exception as e:
         print(f"  Audio mastering failed: {e}")
+
+    # Persist the measured loudness so the feed work can expose it (P4.4).
+    _record_episode_lufs(clean_name, en_lufs)
 
     # --- Quality gate ---
     _run_quality_gate(clean_name, en_txt, en_mp3, podcast_path)
@@ -3042,6 +3091,38 @@ def _run_publish_gate(audio_dir=None, overrides_path=None):
     return gate
 
 
+def _verify_feed_landed(local_feed=None):
+    """Confirm the remote rss/feed.xml matches the local copy after an API-fallback
+    publish (the git reset trusts the uploads landed but never re-checks) (P4.3).
+
+    Returns True on match, False otherwise (and logs). Best-effort.
+    """
+    import base64
+    local = Path(local_feed) if local_feed else (_PUBLISH_REPO / "rss" / "feed.xml")
+    if not local.exists():
+        print("  Feed verification: no local feed.xml to compare.")
+        return False
+    r = subprocess.run(
+        ["gh", "api", "repos/mrleepee/freeist-podcast/contents/rss/feed.xml", "--jq", ".content"],
+        capture_output=True, text=True,
+    )
+    if r.returncode != 0:
+        print(f"  ⚠️ Feed verification: could not fetch remote feed.xml "
+              f"({r.stderr.strip()[:120]})")
+        return False
+    try:
+        remote_bytes = base64.b64decode(r.stdout.strip())
+    except (ValueError, TypeError):
+        print("  ⚠️ Feed verification: unreadable remote content.")
+        return False
+    if remote_bytes == local.read_bytes():
+        print("  Feed verified: remote rss/feed.xml matches local.")
+        return True
+    print("  ⚠️ Feed verification FAILED: remote rss/feed.xml differs from local — "
+          "the push may not have landed. Re-run publish_feed().")
+    return False
+
+
 def publish_feed():
     """Regenerate RSS feed and push to GitHub."""
     print("\nPublishing to feed...")
@@ -3107,6 +3188,9 @@ def publish_feed():
         # Sync local with remote
         subprocess.run(["git", "fetch", "origin"], cwd=_PUBLISH_REPO, capture_output=True)
         subprocess.run(["git", "reset", "--hard", "origin/main"], cwd=_PUBLISH_REPO, capture_output=True)
+        # The reset trusts that the API uploads landed — verify the remote feed
+        # actually matches what we generated (P4.3).
+        _verify_feed_landed()
     else:
         print("Feed pushed to GitHub.")
 

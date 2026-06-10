@@ -69,8 +69,16 @@ def run_all(check_name: str | None = None, include_bad: bool = False) -> bool:
     all_pass = True
     rows = []
 
+    # Checks that need an audio file; for a script-only good fixture they are not
+    # applicable and are reported as skipped rather than failed (mirrors how
+    # quality_gate skips loudness when there's no audio).
+    audio_dependent = {"check_loudness"}
+
     for check_name, mod in checks:
         for fx in good:
+            if check_name in audio_dependent and not fx.get("audio_path"):
+                rows.append((fx["name"], check_name, "SKIP", "no audio (not applicable)"))
+                continue
             result = mod.run(fx)
             status = "PASS" if result.passed else "FAIL"
             if not result.passed:
