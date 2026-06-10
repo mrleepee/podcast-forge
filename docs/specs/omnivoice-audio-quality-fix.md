@@ -6,7 +6,12 @@ handling that causes it, and adds a normalization rule for adjacent model-name n
 (e.g. "Gemma 4 12B").
 
 **Initiative:** Podcast quality upgrade — TTS output quality
-**Status:** ready to implement
+**Status:** mostly implemented — Phases 1 & 3 shipped (PR #11, commit e424c69:
+per-chunk trim + de-click fades, adjacent-number/tmux fixups). Phase 2
+(`_validate_ref_clip`) and Phase 4 (seam-QC harness `checks/seam_qc.py`) shipped
+in the pipeline-integrity initiative (P2.2). **Outstanding asset task:** re-cut the
+reference clip per Appendix D (see `voice_ref/README.md`); the hard-fail guard
+(`OMNIVOICE_REF_STRICT`) defaults off until then.
 **Owner:** Claude Code
 **Primary files:** `video_downloader.py`, `tts_omnivoice.py`, `tts-normalization-prompt.md`, `voice_ref/`
 **Engine context:** OmniVoice (`k2-fsa/OmniVoice`) diffusion TTS, voice-cloning enabled, Apple-Silicon MPS. Migrated from Kokoro on 2026-06-03 (see `.claude/diary/2026-06-03-075819.md`).

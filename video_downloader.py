@@ -1522,6 +1522,33 @@ if _OMNI_REF_AUDIO:
 
 _REF_CLIP_VALIDATED = False  # guard: validate once per process
 
+# Strict mode: a clone reference that ends mid-speech or whose transcript doesn't
+# match the audio is the documented root cause of per-chunk echo. When enabled,
+# rendering with a known-defective reference STOPS the run rather than logging and
+# proceeding — same fail-closed principle as the publish gate (P2.2).
+#
+# Defaults OFF: the shipped reference clip is *currently* defective (ends
+# mid-speech, 0ms trailing silence) and re-cutting it is a human asset task (see
+# voice_ref/ and the omnivoice spec Appendix D). Turning strict on before the
+# re-cut would halt all production. Flip the default to "1" (or set
+# OMNIVOICE_REF_STRICT=1) the moment a clean clip lands — the warning already
+# prints loudly every run until then.
+_OMNI_REF_STRICT = os.environ.get("OMNIVOICE_REF_STRICT", "0").lower() not in ("0", "false", "no")
+
+# Substrings marking a ref-clip warning as FATAL (misalignment / echo conditions).
+_FATAL_REF_MARKERS = (
+    "ends mid-speech",
+    "length mismatch",
+    "ref_text missing",
+    "is silent",
+    "could not read",
+)
+
+
+def _blocking_ref_warnings(warns):
+    """Return the subset of ref-clip warnings that should stop a strict render."""
+    return [w for w in warns if any(m in w for m in _FATAL_REF_MARKERS)]
+
 
 def _validate_ref_clip(path, ref_text, *, sr_expected=24000, min_trailing_ms=150):
     """Return a list of human-readable warnings ([] == clean) and path to cleaned clip."""
@@ -1755,10 +1782,17 @@ def _omnivoice_render(segments, output_mp3_path, *, silence_sec=0.12):
         effective_ref_audio = _OMNI_REF_AUDIO
         global _REF_CLIP_VALIDATED
         if _OMNI_REF_AUDIO and not _REF_CLIP_VALIDATED:
-            _REF_CLIP_VALIDATED = True
             warns, clean_path = _validate_ref_clip(_OMNI_REF_AUDIO, _OMNI_REF_TEXT)
             for w in warns:
                 print(f"  [ref] {w}")
+            blocking = _blocking_ref_warnings(warns)
+            if blocking and _OMNI_REF_STRICT:
+                # Don't render every chunk against a misaligned clone reference.
+                print("  OmniVoice: ABORTING — reference clip is defective "
+                      f"({len(blocking)} blocking issue(s)). Re-cut the clip, or set "
+                      "OMNIVOICE_REF_STRICT=0 to override (will echo). See voice_ref/.")
+                return False
+            _REF_CLIP_VALIDATED = True
             if clean_path:
                 effective_ref_audio = clean_path
 
