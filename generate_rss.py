@@ -104,6 +104,7 @@ def find_podcast_episodes(downloads_dir, metadata=None, suffix=".podcast.mp3", e
             "title": title,
             "description": description,
             "stem": stem,
+            "guid": meta.get("guid"),  # frozen GUID for already-published episodes (C1)
             "mp3_path": mp3_path,
             "mp3_filename": mp3_path.name,
             "duration": duration,
@@ -121,6 +122,45 @@ def stable_show_guid(feed_title):
     """Deterministic show GUID from the title — stable across rebuilds (P3/R2)."""
     import uuid
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"freeist-podcast:{feed_title}"))
+
+
+def snapshot_guids_from_feed(feed_path, metadata_path, suffix=".podcast.mp3"):
+    """Freeze the currently-published GUIDs into episodes.json (C1).
+
+    Reads the live ``feed.xml``, maps each item's existing ``<guid>`` to its
+    episode stem (via the enclosure MP3 URL), and stores it under that slug in
+    ``episodes.json`` — but only when no ``guid`` is recorded yet, so this is
+    idempotent and never overwrites a deliberate value. Returns the number of
+    GUIDs newly frozen. This prevents the GUID-scheme cutover from re-keying the
+    whole back catalogue at once.
+    """
+    from xml.etree.ElementTree import parse as _parse
+    feed_path, metadata_path = Path(feed_path), Path(metadata_path)
+    if not feed_path.exists() or not metadata_path.exists():
+        return 0
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    root = _parse(feed_path).getroot()
+
+    frozen = 0
+    for item in root.iter("item"):
+        guid_el = item.find("guid")
+        enclosure = item.find("enclosure")
+        if guid_el is None or guid_el.text is None or enclosure is None:
+            continue
+        url = enclosure.get("url", "")
+        name = url.rsplit("/", 1)[-1]
+        if not name.endswith(suffix):
+            continue
+        stem = name[: -len(suffix)]
+        entry = metadata.setdefault(stem, {})
+        if not entry.get("guid"):
+            entry["guid"] = guid_el.text.strip()
+            frozen += 1
+
+    if frozen:
+        metadata_path.write_text(
+            json.dumps(metadata, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return frozen
 
 
 def generate_rss(episodes, base_url, feed_title, feed_description, feed_author,
@@ -195,12 +235,16 @@ def generate_rss(episodes, base_url, feed_title, feed_description, feed_author,
         enclosure.set("length", str(ep["filesize"]))
         enclosure.set("type", "audio/mpeg")
 
-        # Stable GUID independent of the hosting URL (R3). Changing --base-url no
-        # longer re-creates the whole catalog as duplicates. This identity is
-        # PERMANENT — do not change the "freeist:" prefix or slug derivation.
+        # Stable GUID independent of the hosting URL (R3). Already-published
+        # episodes keep their frozen GUID from episodes.json so the cutover does
+        # NOT re-key the whole catalog at once (C1); only episodes not yet in the
+        # feed get the new "freeist:<slug>" identity. Either way the value is
+        # PERMANENT once emitted.
         guid = SubElement(item, "guid")
-        guid.text = f"freeist:{stem}" if stem else f"{base_url}/{ep['mp3_filename']}"
-        guid.set("isPermaLink", "false")
+        stored = ep.get("guid")
+        guid.text = stored or (f"freeist:{stem}" if stem else f"{base_url}/{ep['mp3_filename']}")
+        # A stored MP3-URL GUID is a real permalink; the slug form is not.
+        guid.set("isPermaLink", "true" if (stored and stored.startswith("http")) else "false")
 
         # Link the already-published transcript when it exists (R6).
         if ep.get("transcript_filename"):
@@ -243,7 +287,14 @@ def main():
                         help="Show cover art URL; auto-detected from cover.png if present")
     parser.add_argument("--podcast-guid", default=os.environ.get("PODCAST_SHOW_GUID", ""),
                         help="Stable show GUID (default: derived from the title)")
+    parser.add_argument("--snapshot-guids", metavar="FEED_XML",
+                        help="Freeze existing GUIDs from FEED_XML into episodes.json (C1), then exit")
     args = parser.parse_args()
+
+    if args.snapshot_guids:
+        n = snapshot_guids_from_feed(args.snapshot_guids, args.metadata, suffix=args.suffix)
+        print(f"Froze {n} existing GUID(s) into {args.metadata}")
+        return
 
     metadata = load_episode_metadata(args.metadata)
     episodes = find_podcast_episodes(args.downloads, metadata=metadata,

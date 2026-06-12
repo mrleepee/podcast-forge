@@ -251,3 +251,85 @@ P4                   (opportunistic)
 fixtures (0.2), non-interactive gate fixtures (0.3), and the pronunciation lexicon fixture
 (2.1) — each with a known-bad twin proving the test can fail. The publish gate contract
 from `podcast-quality-plan.md` is finally true: nothing ships unless it earned it.
+
+---
+
+## Review comments — implementation review, 2026-06-10
+
+Reviewed commits `33b33e3 → 57fd44b` (Phases 1–7) against this spec, with code reads and
+a test run. Overall: faithful, well-tested implementation. P0.1–0.3, P1.1–1.4, P2.1, P3
+and P4 all verified in code — the revision loop returns the final text and the caller uses
+it; `publish_feed` partitions via `checks/publish_gate.py` and excludes via
+`generate_rss --exclude`; non-interactive gates fail closed into
+`skipped-pending-review.json` with `--force` override; the verifier's no-verdict case is a
+distinct `status: error` that blocks at publish; numbering unions the local dir with
+`episodes.json`; the lexicon substitution generalizes the old tmux fixup; the opening check
+now triggers revision rather than a shrug. The comments below are the problems and
+improvements found, ordered by severity.
+
+### C1 (high) — The GUID cutover itself triggers a one-time catalog-wide re-key
+
+`generate_rss.py:202` now emits `freeist:<slug>` for **every** episode, including the
+~116 already published with URL-based GUIDs. On the next publish, every item's GUID
+changes at once — aggregators that key on `<guid>` (Apple, Overcast, AntennaPod; Spotify
+in part) may treat the entire catalog as new episodes. That is the exact incident R3 was
+meant to prevent, fired once by the fix itself. Before the next `publish_feed()`:
+snapshot the currently-published GUIDs from the live `feed.xml` into `episodes.json` and
+emit the stored GUID for existing episodes, using `freeist:<slug>` only for episodes not
+yet in the feed. If instead the one-time reset is accepted deliberately, write that
+decision down here and do it in a quiet window — it must be a choice, not a side effect.
+**This is the only finding that should block the next publish.**
+
+### C2 (medium) — Blanket grandfathering quietly disarms the gate for the back catalog
+
+All 116 existing episodes are allowlisted in `publish_overrides.json` with the same
+reason, **including all four `ep122-*` slugs** — and overridden episodes skip the
+duplicate-number assertion (`publish_gate.py`), so the check written for the documented
+ep122 collision can never fire on it. Nothing now forces the renumber. Suggested
+shrinkage plan: (a) run the quality gate retroactively over the back catalog (scripts and
+audio are on disk) and delete every override that passes on its own; (b) resolve the
+ep122 quadruple by renumbering — note `ep106-history-taxation…` and
+`ep122-history-taxation…` look like the same episode published twice, so this is also a
+content dedup; (c) treat any override older than ~30 days as a bug.
+
+### C3 (medium) — P2.2's root cause is still live: clip not re-cut, strict mode default-off
+
+The hard-fail (`OMNIVOICE_REF_STRICT`), `_blocking_ref_warnings`, `voice_ref/README.md`
+re-cut instructions, and `checks/seam_qc.py` are all in and tested — but the reference
+clip itself is unchanged (still 0 ms trailing silence), and strict defaults off precisely
+because of that, so production still renders every chunk against the defective clip. The
+agent was right not to flip the default (it would halt production), but this leaves the
+only remaining step a human one: **re-cut the clip per `voice_ref/README.md`, then flip
+the default to strict-on in code (not just env)**. Until then every audible improvement
+from Phase 4 is documentation.
+
+### C4 (low) — Seam QC is standalone and runs nowhere
+
+`checks/seam_qc.py` is invoked by nothing (by design: whisperx lives only in the
+OmniVoice venv). Its energy-only mode needs no transcription — wire that half into
+`_omnivoice_render` (or the rerender script) and record per-seam max energy in
+`quality_report.json`, so seam regressions show up in the existing gate rather than
+requiring a manual run.
+
+### C5 (low) — Four tests hard-import `soundfile` and fail in a clean environment
+
+`tests/test_refclip_and_seam_qc.py` (4 tests) fails with `ModuleNotFoundError: soundfile`
+where the audio stack isn't installed — verified in this review's sandbox (74 passed /
+4 failed on the new suites). Same class of problem the yt_dlp lazy import just fixed.
+Add `pytest.importorskip("soundfile")` so the suite is green-or-skipped everywhere.
+
+### C6 (nit) — Hardcoded verification threshold in the error path
+
+`video_downloader.py:2618` builds the verifier-error report with `"threshold": 3` instead
+of `_VERIFICATION_THRESHOLD`. Harmless today; wrong the day the env var changes.
+
+### C7 — Still open from this spec (not regressions)
+
+- **P2.3 Spanish decision** untouched: the es track still bypasses evidence/QA/verification
+  entirely. The decision (gate it or drop it) remains with the owner.
+- Stage 4b's opening-check print in `_run_evidence_pipeline` (`:2543–2554`) is now
+  redundant — the revision loop already enforces freshness — and runs the check a second
+  time. Fold it into the loop's output or drop it.
+- The omnivoice spec status was corrected (good), but **this** spec's P0–P4 sections now
+  describe fixed behavior in the present tense; mark P0, P1, P2.1, P3, P4 as shipped
+  (commits `33b33e3`–`57fd44b`) so the next reader doesn't re-fix them.
