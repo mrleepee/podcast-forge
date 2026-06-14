@@ -17,5 +17,7 @@
   "cuda": "kooda",
   "oauth": "oh-auth",
   "arxiv": "archive",
-  "webassembly": "web-assembly"
+  "webassembly": "web-assembly",
+  "ci": "C I",
+  "ed": "E D"
 }
