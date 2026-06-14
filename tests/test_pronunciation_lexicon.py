@@ -92,6 +92,35 @@ class TestSubstitutionReachesTts:
         assert "tmux" in terms and "arxiv" in terms
 
 
+class TestShippedCiEd:
+    """ep131 ships 'CI' (Continuous Integration) and ep133 ships 'ED' (the 1970s
+    Unix line editor) as ALL-CAPS tokens. Both are real terms, not false
+    positives, so the shipped lexicon must carry spoken forms for them — one
+    edit fixes both the pronunciation coverage check and the TTS substitution."""
+
+    def test_shipped_lexicon_has_ci_and_ed(self):
+        from checks.check_pronunciation import load_risky_lexicon
+        lex = load_risky_lexicon()
+        assert lex.get("ci"), "shipped lexicon must map 'ci' -> 'C I'"
+        assert lex.get("ed"), "shipped lexicon must map 'ed' -> 'E D'"
+
+    def test_ci_passes_coverage_with_shipped_lexicon(self):
+        from checks.check_pronunciation import run
+        shipped = REPO / "checks" / "risky_terms.json"
+        fx = {"script_text": "a single repository with CI checks",
+              "risky_lexicon_path": shipped}
+        result = run(fx)
+        assert result.passed, result.reason
+
+    def test_ed_passes_coverage_with_shipped_lexicon(self):
+        from checks.check_pronunciation import run
+        shipped = REPO / "checks" / "risky_terms.json"
+        fx = {"script_text": "an old text editor called ED from the seventies",
+              "risky_lexicon_path": shipped}
+        result = run(fx)
+        assert result.passed, result.reason
+
+
 if __name__ == "__main__":
     import pytest
     sys.exit(pytest.main([__file__, "-v"]))
