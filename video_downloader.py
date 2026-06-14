@@ -1106,7 +1106,77 @@ def _minimax_post_json(payload, headers, hard_timeout=120, attempts=4):
         else:
             last_error = f"MiniMax error ({api_url}): {box.get('err')}"
         time.sleep(1)
-    raise RuntimeError(f"MiniMax failed after {attempts} attempts: {last_error}")
+    # MiniMax exhausted (down/hanging/flaky path) — fall back to the
+    # Anthropic-compatible glm endpoint so production can't be blocked by a
+    # degraded MiniMax path. Cron envs where MiniMax holds never reach here.
+    print(f"    MiniMax unavailable ({last_error}); falling back to glm endpoint...")
+    return _glm_post_json(payload, hard_timeout=hard_timeout, attempts=attempts)
+
+
+def _glm_post_json(payload, hard_timeout=120, attempts=4):
+    """Call the Anthropic-compatible glm endpoint, adapting a MiniMax-style
+    payload (model/messages[/temperature], optional system role) to the
+    Anthropic Messages API and returning a MiniMax-shaped body
+    (``{"choices":[{"message":{"content": ...}}]}``) so every existing call site
+    parses unchanged. Uses the same daemon-thread hard timeout + retry as the
+    MiniMax path."""
+    import threading
+    import time
+    base = os.environ.get("ANTHROPIC_BASE_URL", "").rstrip("/")
+    token = os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
+    model = os.environ.get("ANTHROPIC_DEFAULT_SONNET_MODEL", "glm-4.5-air")
+    if not base or not token:
+        raise RuntimeError("glm fallback unavailable: ANTHROPIC_BASE_URL/ANTHROPIC_AUTH_TOKEN not set")
+
+    req = json.loads(payload.decode("utf-8"))
+    system, user_messages = None, []
+    for m in req.get("messages", []):
+        if m.get("role") == "system":
+            system = m.get("content", "")
+        else:
+            user_messages.append({"role": m.get("role", "user"), "content": m.get("content", "")})
+    anthropic_req = {"model": model, "max_tokens": 4096, "messages": user_messages}
+    if system:
+        anthropic_req["system"] = system
+    if "temperature" in req:
+        anthropic_req["temperature"] = req["temperature"]
+    data = json.dumps(anthropic_req).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json",
+        "x-api-key": token,
+        "authorization": f"Bearer {token}",
+        "anthropic-version": "2023-06-01",
+    }
+    last_error = None
+    for attempt in range(attempts):
+        box = {}
+
+        def _work():
+            try:
+                r = urllib.request.Request(base + "/v1/messages", data=data, headers=headers)
+                with urllib.request.urlopen(r, timeout=120) as resp:
+                    box["body"] = resp.read()
+            except urllib.error.HTTPError as e:
+                box["http"] = (e.code, e.read().decode("utf-8", errors="replace"))
+            except Exception as e:
+                box["err"] = f"{type(e).__name__}: {e}"
+
+        worker = threading.Thread(target=_work, daemon=True)
+        worker.start()
+        worker.join(hard_timeout)
+        if worker.is_alive():
+            last_error = f"hard timeout >{hard_timeout}s"
+            continue
+        if "body" in box:
+            an = json.loads(box["body"].decode("utf-8"))
+            text = "".join(b.get("text", "") for b in (an.get("content") or []) if b.get("type") == "text")
+            return {"choices": [{"message": {"content": text}}]}
+        if "http" in box:
+            last_error = f"glm API error {box['http'][0]}: {box['http'][1][:200]}"
+        else:
+            last_error = f"glm error: {box.get('err')}"
+        time.sleep(1)
+    raise RuntimeError(f"glm failed after {attempts} attempts: {last_error}")
 
 
 def _vtt_to_text(vtt_path):
