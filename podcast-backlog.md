@@ -80,3 +80,10 @@ Liberland episodes spaced with 4 non-Liberland between each.
    - Type: URL-based
    - Flags: default (~5 min)
    - Notes: David Ondrej shares a video of a developer named Pietro using OpenAI Codex at extreme productivity. Described as "the way Pietro works will break your brain" and "watch this before you write another line of code." Covers an advanced Codex workflow showing what 100x developer velocity looks like with AI agents. Connects to ep135 (systems that prompt themselves), ep136 (Boris Cherny setup tips), ep100 (dynamic workflows). Señora Freedom angle: when one person with the right tools outpaces an entire team, the question isn't whether AI helps — it's whether the gap between those who know how to use it and those who don't becomes unbridgeable.
+
+7. 🎥 **Top Brain Surgeon "Instantly Banned" After Revealing This**
+   - Category: Video
+   - Source: https://x.com/XPHOENIXDRAGON/status/2065766895811281192/video/1
+   - Type: URL-based
+   - Flags: default (~5 min)
+   - Notes: @XPHOENIXDRAGON shares a viral short-form video titled "Top Brain Surgeon Instantly Banned After Revealing This" — a clickbait-framed health/medical claim about a brain surgeon allegedly censored for disclosing something. **Fact-check thoroughly**: the "banned for revealing" framing is a common viral-video pattern; before producing, verify the surgeon's identity, the specific claim made, and whether any ban/censorship actually occurred. Treat as unverified social media content, not an established fact. Señora Freedom angle: when "banned" is the hook, the real question is what's being suppressed — and whether the viral machine is selling truth or manufactured outrage.
