@@ -47,32 +47,22 @@ def _call_minimax(system_prompt: str, user_prompt: str,
         "temperature": temperature,
     }).encode("utf-8")
 
-    last_error = None
-    for api_url in _MINIMAX_API_URLS:
-        req = urllib.request.Request(
-            api_url,
-            data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}",
-            },
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=180) as resp:
-                body = json.loads(resp.read().decode("utf-8"))
-            choices = body.get("choices") or []
-            if choices:
-                return choices[0].get("message", {}).get("content", "").strip()
-            last_error = f"Unexpected MiniMax response: {body}"
-        except urllib.error.HTTPError as e:
-            err_body = e.read().decode("utf-8", errors="replace")
-            last_error = f"MiniMax API error {e.code} ({api_url}): {err_body}"
-            continue
-        except (urllib.error.URLError, TimeoutError, OSError) as e:
-            last_error = f"MiniMax API connection error ({api_url}): {e}"
-            continue
-
-    raise RuntimeError(last_error or "All MiniMax API URLs failed")
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+    # Reuse video_downloader's hard-timeout+retry helper so a hung MiniMax call
+    # (slow-drip SSL read) is abandoned after hard_timeout and retried, instead
+    # of hanging the whole pipeline for 10+ minutes.
+    from video_downloader import _minimax_post_json
+    try:
+        body = _minimax_post_json(payload, headers)
+    except RuntimeError as e:
+        raise RuntimeError(str(e))
+    choices = body.get("choices") or []
+    if not choices:
+        raise RuntimeError(f"Unexpected MiniMax response: {body}")
+    return choices[0].get("message", {}).get("content", "").strip()
 
 
 # ---------------------------------------------------------------------------

@@ -6,6 +6,8 @@ import json
 import re
 import shutil
 import urllib.parse
+import urllib.request
+import urllib.error
 from pathlib import Path
 
 # NOTE: yt_dlp is imported lazily inside the download functions
@@ -1062,6 +1064,51 @@ _MINIMAX_API_URLS = [
 ]
 
 
+def _minimax_post_json(payload, headers, hard_timeout=120, attempts=4):
+    """POST to MiniMax with a hard wall-clock timeout and retry.
+
+    urllib's per-operation timeout does not fire on slow-drip SSL reads, so a
+    MiniMax call can hang for many minutes with no exception under degraded
+    network conditions (observed: 10+ minute hangs on the narration/QA calls).
+    Each attempt runs in a daemon worker thread that is abandoned if it exceeds
+    ``hard_timeout`` seconds; attempts rotate across the fallback URLs and retry
+    on hang or error. Returns the parsed JSON response body, or raises
+    RuntimeError if every attempt fails.
+    """
+    import threading
+    import time
+    last_error = None
+    for attempt in range(attempts):
+        api_url = _MINIMAX_API_URLS[attempt % len(_MINIMAX_API_URLS)]
+        box = {}
+
+        def _work(u=api_url):
+            try:
+                req = urllib.request.Request(u, data=payload, headers=headers)
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    box["body"] = resp.read()
+            except urllib.error.HTTPError as e:
+                box["http"] = (e.code, e.read().decode("utf-8", errors="replace"))
+            except Exception as e:
+                box["err"] = f"{type(e).__name__}: {e}"
+
+        worker = threading.Thread(target=_work, daemon=True)
+        worker.start()
+        worker.join(hard_timeout)
+        if worker.is_alive():
+            last_error = f"hard timeout >{hard_timeout}s ({api_url})"
+            print(f"    MiniMax call hung >{hard_timeout}s, retry {attempt + 1}/{attempts}")
+            continue
+        if "body" in box:
+            return json.loads(box["body"].decode("utf-8"))
+        if "http" in box:
+            last_error = f"MiniMax API error {box['http'][0]} ({api_url}): {box['http'][1]}"
+        else:
+            last_error = f"MiniMax error ({api_url}): {box.get('err')}"
+        time.sleep(1)
+    raise RuntimeError(f"MiniMax failed after {attempts} attempts: {last_error}")
+
+
 def _vtt_to_text(vtt_path):
     """Convert a VTT subtitle file to plain text using the project's vtt_to_text module."""
     from vtt_to_text import iter_caption_lines, lines_to_paragraphs
@@ -1128,31 +1175,19 @@ def _summarize_with_minimax(transcript, video_title=""):
 
     print("Summarizing with MiniMax...")
     last_error = None
-    for api_url in _MINIMAX_API_URLS:
-        req = urllib.request.Request(
-            api_url,
-            data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}",
-            },
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=300) as resp:
-                body = json.loads(resp.read().decode("utf-8"))
-            choices = body.get("choices") or []
-            if choices:
-                return choices[0].get("message", {}).get("content", "").strip()
-            # Non-choice response means auth worked but something else failed
-            print(f"Unexpected MiniMax response: {body}")
-            return None
-        except urllib.error.HTTPError as e:
-            err_body = e.read().decode("utf-8", errors="replace")
-            last_error = f"MiniMax API error {e.code} ({api_url}): {err_body}"
-            continue
-
-    if last_error:
-        print(last_error)
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+    try:
+        body = _minimax_post_json(payload, headers)
+    except RuntimeError as e:
+        print(str(e))
+        return None
+    choices = body.get("choices") or []
+    if choices:
+        return choices[0].get("message", {}).get("content", "").strip()
+    print(f"Unexpected MiniMax response: {body}")
     return None
 
 
@@ -1336,23 +1371,18 @@ def _narrate_as_podcast(summary_text, video_title="", extra_prompt="",
     }).encode("utf-8")
 
     print(f"Generating {'Spanish' if language == 'es' else 'podcast'} narration...")
-    for api_url in _MINIMAX_API_URLS:
-        req = urllib.request.Request(
-            api_url, data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}",
-            },
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=300) as resp:
-                body = json.loads(resp.read().decode("utf-8"))
-            choices = body.get("choices") or []
-            if choices:
-                return choices[0].get("message", {}).get("content", "").strip()
-        except urllib.error.HTTPError as e:
-            err = e.read().decode("utf-8", errors="replace")
-            print(f"MiniMax error {e.code}: {err}")
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+    try:
+        body = _minimax_post_json(payload, headers)
+    except RuntimeError as e:
+        print(str(e))
+        return None
+    choices = body.get("choices") or []
+    if choices:
+        return choices[0].get("message", {}).get("content", "").strip()
     return None
 
 
@@ -1415,23 +1445,17 @@ def _polish_for_tts_raw(narrative_text, language="en"):
         "temperature": 0.1,
     }).encode("utf-8")
 
-    for api_url in _MINIMAX_API_URLS:
-        req = urllib.request.Request(
-            api_url, data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}",
-            },
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=300) as resp:
-                body = json.loads(resp.read().decode("utf-8"))
-            choices = body.get("choices") or []
-            if choices:
-                return choices[0].get("message", {}).get("content", "").strip()
-        except (urllib.error.HTTPError, TimeoutError, OSError) as e:
-            print(f"TTS polish error ({type(e).__name__}): {e}")
-            continue
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+    try:
+        body = _minimax_post_json(payload, headers)
+        choices = body.get("choices") or []
+        if choices:
+            return choices[0].get("message", {}).get("content", "").strip()
+    except RuntimeError as e:
+        print(f"TTS polish error: {e}")
     return narrative_text
 
 
@@ -1454,23 +1478,17 @@ def _polish_for_tts(narrative_text, language="en", duo=False):
     }).encode("utf-8")
 
     print("Polishing narration for TTS...")
-    for api_url in _MINIMAX_API_URLS:
-        req = urllib.request.Request(
-            api_url, data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}",
-            },
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=300) as resp:
-                body = json.loads(resp.read().decode("utf-8"))
-            choices = body.get("choices") or []
-            if choices:
-                return choices[0].get("message", {}).get("content", "").strip()
-        except (urllib.error.HTTPError, TimeoutError, OSError) as e:
-            print(f"TTS polish error ({type(e).__name__}): {e}")
-            continue
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+    try:
+        body = _minimax_post_json(payload, headers)
+        choices = body.get("choices") or []
+        if choices:
+            return choices[0].get("message", {}).get("content", "").strip()
+    except RuntimeError as e:
+        print(f"TTS polish error: {e}")
     return narrative_text
 
 
@@ -2377,26 +2395,21 @@ def _check_sponsored_content(summary_text, source_label=""):
         "temperature": 0.1,
     }).encode("utf-8")
 
-    for api_url in _MINIMAX_API_URLS:
-        req = urllib.request.Request(
-            api_url, data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}",
-            },
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                body = json.loads(resp.read().decode("utf-8"))
-            choices = body.get("choices") or []
-            if choices:
-                text = choices[0].get("message", {}).get("content", "").strip()
-                score_match = re.search(r"SCORE:\s*(\d+)", text)
-                reason_match = re.search(r"REASON:\s*(.+)", text)
-                if score_match:
-                    return int(score_match.group(1)), (reason_match.group(1).strip() if reason_match else "")
-        except (urllib.error.HTTPError, TimeoutError, OSError):
-            continue
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+    try:
+        body = _minimax_post_json(payload, headers, hard_timeout=60, attempts=3)
+    except RuntimeError:
+        return None
+    choices = body.get("choices") or []
+    if choices:
+        text = choices[0].get("message", {}).get("content", "").strip()
+        score_match = re.search(r"SCORE:\s*(\d+)", text)
+        reason_match = re.search(r"REASON:\s*(.+)", text)
+        if score_match:
+            return int(score_match.group(1)), (reason_match.group(1).strip() if reason_match else "")
     return None
 
 
