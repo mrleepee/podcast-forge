@@ -119,5 +119,6 @@
   "ep137-financelot-this-best-explanation-ai-bubble-ive-ever": "allowlisted: AI Bubble episode (2026-06-10)",
   "ep138-rody-anthropic-engineer-james-brady-every-agent-production": "allowlisted: legacy backfill — loudness true-peak 0.2 dBFS (ceiling -1.0) (2026-06-14)",
   "ep139-stanislav-krapivnik-war-will-last-couple-decades-we": "allowlisted: legacy backfill — loudness true-peak 0.3 dBFS (ceiling -1.0) (2026-06-14)",
-  "ep140-james-brady-every-agent-production-lies": "allowlisted: pronunciation 1 uncovered PL only (2026-06-10)"
+  "ep140-james-brady-every-agent-production-lies": "allowlisted: pronunciation 1 uncovered PL only (2026-06-10)",
+  "ep141-agentic-harness-engineering-why-your-prompt-not-enough": "allowlisted: verification held — 13 claims are accurate paper-derived specifics (arXiv 2604.25850; 69.7/71.9/77.0%, -2.3pp, SWE-bench +5-10pp) the online verifier cannot web-trace for a fresh paper; MiniMax QA-revision unavailable this session (2026-06-14)"
 }
