@@ -32,26 +32,18 @@
 - ep131 — Anthropic's Own Data Stack: 95% Self-Service Analytics with Claude
 - ep132 — Emerging Medications That Could Reverse Aging
 - ep140 — James Brady: Every Agent in Production Lies
+- ep141 — Agentic Harness Engineering: Why Your Prompt Isn't Enough
+- ep142 — The Open Knowledge Format: Markdown as the Lingua Franca for AI Agents
+- ep143 — Inside Claude Code: The Design Space of an AI Agent System
+- _NOTE (2026-06-15): backlog items #1 (Bezrukov at SPIEF) and #2 (The AI Bubble Explained) were already published as ep139 and ep137 respectively — removed from Pending below to prevent duplicate production._
 
 ## Pending Episodes (alternating subjects)
 
 Categories: 🤖 AI · 🏠 Nomad · 🏛️ Libertarian · 💰 Finance · 🎥 Video
 Liberland episodes spaced with 4 non-Liberland between each.
 
-1. 🏛️ **Bezrukov at SPIEF: "Accept That War Is the New Normal"**
-   - Category: Libertarian
-   - Source: https://x.com/STANISKRAPIVNIK/status/2062549390909170079
-   - Type: URL-based
-   - Flags: `--long` (~10 min)
-   - Notes: Stanislav Krapivnik shares key theses from Andrey Bezrukov (former SVR intelligence officer, exposed as Russian illegal "Donald Heathfield" in 2010) speaking at St. Petersburg International Economic Forum (Jun 2026, 77K views). Bezrukov argues: (1) Russia is in a "new type of war" — attrition and subversion targeting leaders, infrastructure, scientists, not territory, (2) West pursuing "boiling frog" strategy to avoid nuclear clash while gradually escalating, (3) "We're on the first hill of world war" — next major clash likely in Asia, (4) enemy aims to neutralise Russian nuclear forces via space-based systems or agent-planted strikes like "Operation Spider Web", (5) biowar threat from labs around Russia's borders, (6) economy must serve both development and defence for "a couple of decades", (7) "Stop being good — too many red lines remain on paper." **Fact-check thoroughly**: verify Bezrukov's identity and background (SVR colonel, arrested in US 2010 as part of Illegals Program, deported in spy swap), verify SPIEF 2026 context, cross-reference claims about "Operation Spider Web" and biolab allegations against known sources. Connects to ep90 (Liberland meritocracy), ep97 (Liberland para-state). Señora Freedom angle: when both sides claim existential threat, who pays the price?
-
-2. 💰 **The AI Bubble Explained**
-   - Category: Finance
-   - Source: https://x.com/FinanceLancelot/status/2063408394111783353/video/1
-   - Type: URL-based
-   - Flags: `--long` (~10 min)
-   - Extra prompt: mirror all points in fine detail
-   - Notes: FinanceLancelot shares what he calls "the best explanation of the AI bubble I've ever heard" — a video from @atmoio covering the insanity of AI hype and bubble dynamics. **Extra prompt**: mirror all points in fine detail — ensure the narration reproduces every argument and data point from the source. Connects to the broader AI investment narrative, Silicon Valley spending, and the question of whether AI delivers on its promises. Señora Freedom angle: when trillions flow into a narrative, who profits and who pays?
+1. ~~🏛️ **Bezrukov at SPIEF: "Accept That War Is the New Normal"**~~ — ✅ ALREADY PUBLISHED as **ep139** (removed to prevent duplicate production)
+2. ~~💰 **The AI Bubble Explained**~~ — ✅ ALREADY PUBLISHED as **ep137** (removed to prevent duplicate production)
 
 3. 🤖 **Demis Hassabis: Who Survives the Next 5 Years**
    - Category: AI
