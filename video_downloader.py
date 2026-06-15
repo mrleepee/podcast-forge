@@ -1074,7 +1074,13 @@ def _minimax_post_json(payload, headers, hard_timeout=120, attempts=4):
     ``hard_timeout`` seconds; attempts rotate across the fallback URLs and retry
     on hang or error. Returns the parsed JSON response body, or raises
     RuntimeError if every attempt fails.
+
+    If ``PODCAST_LLM_PREFER_GLM`` is set, skip MiniMax entirely and route
+    straight to the glm endpoint — used when MiniMax is flaky/down so its slow
+    hang-timeout does not stall every call.
     """
+    if os.environ.get("PODCAST_LLM_PREFER_GLM"):
+        return _glm_post_json(payload, hard_timeout=hard_timeout, attempts=attempts)
     import threading
     import time
     last_error = None
