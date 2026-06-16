@@ -2507,6 +2507,51 @@ def _record_episode_lufs(slug, lufs, episodes_json=None):
         print(f"  Could not record LUFS in {path.name}: {e}")
 
 
+def _episode_blurb(summary_text, limit=280):
+    """First blurb-length excerpt of a research summary, for the RSS description
+    when no curated description has been written yet."""
+    text = re.sub(r"\s+", " ", summary_text or "").strip()
+    if len(text) <= limit:
+        return text
+    snippet = text[:limit]
+    for sep in (". ", "? ", "! "):
+        cut = snippet.rfind(sep)
+        if cut > limit // 2:
+            return snippet[:cut + 1].strip()
+    return snippet.rsplit(" ", 1)[0].rstrip(",;:") + "…"
+
+
+def _register_episode_metadata(slug, title, description, guid, episodes_json=None):
+    """Record an episode's title/description/guid in episodes.json so it never
+    ships under the slug-derived fallback title.
+
+    Uses ``setdefault`` so a curated value (written by the publishing step) is
+    never overwritten — this only fills in fields that are missing. Best-effort:
+    a missing/corrupt registry is left untouched rather than raising. This is
+    the fix for episodes (e.g. ep142/ep143) that shipped with only a ``lufs``
+    entry because the separate registration step was skipped.
+    """
+    if not title:
+        return
+    path = Path(episodes_json) if episodes_json else _EPISODES_JSON
+    try:
+        data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(data, dict):
+        return
+    entry = data.setdefault(slug, {})
+    entry.setdefault("title", title)
+    if description:
+        entry.setdefault("description", description)
+    if guid:
+        entry.setdefault("guid", guid)
+    try:
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    except OSError as e:
+        print(f"  Could not register episode metadata in {path.name}: {e}")
+
+
 # ---------------------------------------------------------------------------
 # Evidence-first pipeline
 # ---------------------------------------------------------------------------
@@ -3037,6 +3082,12 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
 
     # Persist the measured loudness so the feed work can expose it (P4.4).
     _record_episode_lufs(clean_name, en_lufs)
+
+    # Register title/description/guid so the episode never ships under the
+    # slug-derived fallback title (fix for ep142/ep143 shipping lufs-only).
+    # setdefault preserves any curated value the publishing step already wrote.
+    _register_episode_metadata(
+        clean_name, video_title, _episode_blurb(summary_text), f"freeist:{clean_name}")
 
     # --- Quality gate ---
     _run_quality_gate(clean_name, en_txt, en_mp3, podcast_path)
