@@ -2370,6 +2370,91 @@ def _check_sponsored_content(summary_text, source_label=""):
     return None
 
 
+# ---------------------------------------------------------------------------
+# Title-clarity gate — is the title self-explanatory to a fresh-context reader?
+#
+# A title is "good" only if a reader given nothing but the title can infer the
+# subject. Each round asks GLM (glm-5.2 via _call_llm), given ONLY the title,
+# what it thinks the episode is about; a second call judges whether that guess
+# matches the real description; if not, a third call rewrites the title toward
+# the real topic and we re-test. Caps at max_rounds and returns the best title.
+# Mirrors the _run_qa_revision_loop idiom (check → revise → cap).
+# ---------------------------------------------------------------------------
+
+_TITLE_GUESS_SYS = (
+    "You are given only the TITLE of a podcast episode and nothing else. Based on "
+    "the title alone, state in one or two sentences what you believe the episode is "
+    "about. Be concrete about the subject. Do not hedge and do not say you are guessing."
+)
+
+_TITLE_JUDGE_SYS = (
+    "You decide whether a listener's inferred topic for a podcast episode matches "
+    "what the episode is actually about. You are given the listener's GUESS and the "
+    "episode's actual DESCRIPTION. On the first line reply with exactly one word — "
+    "MATCH or NO_MATCH — where MATCH means the guess captures the same core subject "
+    "as the description (a close approximation counts; only answer NO_MATCH if the "
+    "guess is about a clearly different topic). You may add a one-sentence reason on "
+    "the next line."
+)
+
+_TITLE_REVISE_SYS = (
+    "Rewrite a podcast episode TITLE so a brand-new listener can infer the episode's "
+    "actual topic from the title alone. Keep it punchy and attention-grabbing, at most "
+    "about 80 characters, plain prose (no surrounding quotation marks, no clickbait, "
+    "no trailing flourish). Return ONLY the new title on a single line, with no preamble."
+)
+
+
+def _ensure_title_clarity(title, description, *, max_rounds=3):
+    """Revise ``title`` until a fresh-context GLM guess of the topic aligns with
+    ``description``.
+
+    Each round: (1) ask GLM, given ONLY the title, what the episode is about — the
+    description never enters that call, so the guess is genuinely fresh-context;
+    (2) judge whether the guess matches the description; (3) if not, rewrite the
+    title toward the real topic and repeat. Caps at ``max_rounds`` and returns the
+    best title found. Never raises — on GLM unavailability it returns the current
+    title (graceful degradation, consistent with the polish/TTS call sites).
+    """
+    title = (title or "").strip()
+    if not title:
+        return title
+    desc_preview = (description or "")[:1500]
+    for attempt in range(max_rounds):
+        try:
+            guess = _call_llm(_TITLE_GUESS_SYS, title,
+                              temperature=0.2, max_tokens=120, hard_timeout=60, attempts=3)
+            verdict = _call_llm(_TITLE_JUDGE_SYS,
+                                f"GUESS:\n{guess}\n\nDESCRIPTION:\n{desc_preview}",
+                                temperature=0.1, max_tokens=60, hard_timeout=60, attempts=3)
+        except RuntimeError as e:
+            print(f"  Title-clarity check unavailable ({e}); keeping current title")
+            return title
+
+        first_line = next((ln for ln in verdict.splitlines() if ln.strip()), "").strip().upper()
+        if first_line.startswith("MATCH"):
+            print(f"  Title clarity OK (round {attempt + 1}/{max_rounds}): {title}")
+            return title
+        if attempt >= max_rounds - 1:
+            break  # final round failed; stop before a pointless revise
+
+        try:
+            revised = _call_llm(_TITLE_REVISE_SYS,
+                                f"CURRENT TITLE:\n{title}\n\nDESCRIPTION (the real topic):\n{desc_preview}",
+                                temperature=0.4, max_tokens=80, hard_timeout=60, attempts=3)
+        except RuntimeError as e:
+            print(f"  Title revision unavailable ({e}); keeping current title")
+            return title
+        revised = next((ln for ln in revised.splitlines() if ln.strip()), "").strip().strip("\"'").strip()
+        if not revised or revised == title:
+            break  # no progress — avoid a pointless loop
+        print(f"  Title unclear (round {attempt + 1}/{max_rounds}); revising: {title!r} -> {revised!r}")
+        title = revised
+
+    print(f"  Title clarity not confirmed after {max_rounds} rounds; using best title: {title}")
+    return title
+
+
 def _next_episode_number(podcast_dir=None, episodes_json=None):
     """Find the next episode number from the union of the local audio dir and the
     published registry (episodes.json).
@@ -2836,6 +2921,19 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
     else:
         print("  Similarity check passed.")
 
+    # --- Title-clarity gate (fresh-context: does the title alone convey the topic?) ---
+    # Runs after the sponsor/similarity gates so we don't spend LLM calls on episodes
+    # that'll be skipped; the (possibly revised) title then flows into narration and
+    # re-derives the slug/filename.
+    if os.environ.get("TITLE_CLARITY_CHECK", "1") != "0" and (video_title or "").strip():
+        _tc_rounds = int(os.environ.get("TITLE_CLARITY_MAX_ROUNDS", "3"))
+        clarified = _ensure_title_clarity(video_title, summary_text, max_rounds=_tc_rounds)
+        if clarified and clarified != video_title:
+            video_title = clarified
+            slug = _slugify(video_title or summary_path.stem.replace(".summary", ""))
+            clean_name = f"ep{ep_num:02d}-{slug}"
+            print(f"  Title clarified → {clean_name}")
+
     # Resolve the audio generator once, before the pipeline branch. The evidence
     # path never set it, so a non-bilingual Spanish narration later raised
     # NameError after the (expensive) English production had already run (P1.1).
@@ -2879,36 +2977,40 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
             if not _gen_fn(en_narrative, en_mp3, lang="en"):
                 return None
 
-    # --- Spanish ---
-    es_txt = podcast_path / f"{clean_name}.podcast.es.txt"
+    # --- Spanish (optional; off by default — set PRODUCE_SPANISH=1 to re-enable) ---
+    # es_mp3 is always defined so the mastering/intro-splice loops below can guard on exists().
     es_mp3 = podcast_path / f"{clean_name}.podcast.es.mp3"
+    if os.environ.get("PRODUCE_SPANISH", "0") == "1":
+        es_txt = podcast_path / f"{clean_name}.podcast.es.txt"
 
-    if es_mp3.exists():
-        print(f"Spanish podcast already exists: {es_mp3}")
-    else:
-        if es_txt.exists():
-            print(f"Spanish narration exists, skipping narration generation")
-            es_narrative = es_txt.read_text(encoding="utf-8")
+        if es_mp3.exists():
+            print(f"Spanish podcast already exists: {es_mp3}")
         else:
-            es_narrative = _narrate_as_podcast(
-                summary_text, video_title=video_title,
-                extra_prompt=extra_prompt, target_words=target_words, language="es", duo=duo)
-            if not es_narrative:
-                print("Failed to generate Spanish narration.")
+            if es_txt.exists():
+                print(f"Spanish narration exists, skipping narration generation")
+                es_narrative = es_txt.read_text(encoding="utf-8")
             else:
-                es_narrative = _polish_for_tts(es_narrative, language="es", duo=duo)
-                es_txt.write_text(es_narrative, encoding="utf-8")
-                print(f"  Spanish narration saved: {es_txt.name}")
+                es_narrative = _narrate_as_podcast(
+                    summary_text, video_title=video_title,
+                    extra_prompt=extra_prompt, target_words=target_words, language="es", duo=duo)
+                if not es_narrative:
+                    print("Failed to generate Spanish narration.")
+                else:
+                    es_narrative = _polish_for_tts(es_narrative, language="es", duo=duo)
+                    es_txt.write_text(es_narrative, encoding="utf-8")
+                    print(f"  Spanish narration saved: {es_txt.name}")
 
-        if es_txt.exists():
-            es_narrative = es_txt.read_text(encoding="utf-8")
-            # Detect bilingual ES:/EN: format and route to bilingual audio
-            if es_narrative.lstrip().startswith("EN:") or "\nEN:" in es_narrative:
-                if not _generate_bilingual_audio(es_narrative, es_mp3):
-                    print("Bilingual audio generation failed.")
-            else:
-                if not _gen_fn(es_narrative, es_mp3, lang="es"):
-                    print("Spanish audio generation failed.")
+            if es_txt.exists():
+                es_narrative = es_txt.read_text(encoding="utf-8")
+                # Detect bilingual ES:/EN: format and route to bilingual audio
+                if es_narrative.lstrip().startswith("EN:") or "\nEN:" in es_narrative:
+                    if not _generate_bilingual_audio(es_narrative, es_mp3):
+                        print("Bilingual audio generation failed.")
+                else:
+                    if not _gen_fn(es_narrative, es_mp3, lang="es"):
+                        print("Spanish audio generation failed.")
+    else:
+        print("  Spanish track disabled (PRODUCE_SPANISH != 1); producing English-only.")
 
     # --- Splice intro/outro before mastering ---
     for mp3_path in [en_mp3, es_mp3]:
