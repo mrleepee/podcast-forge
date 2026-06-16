@@ -78,7 +78,7 @@ def _call_minimax(system_prompt: str, user_prompt: str,
 # subscription as Claude Code (no API top-up required).
 _ZAI_ANTHROPIC_BASE = "https://api.z.ai/api/anthropic"
 _ZAI_ANTHROPIC_VERSION = "2023-06-01"
-_VERIFIER_MODEL = os.environ.get("VERIFIER_MODEL", "glm-5.1")
+_VERIFIER_MODEL = os.environ.get("VERIFIER_MODEL", "glm-5.2")
 _VERIFIER_MAX_TOKENS = int(os.environ.get("VERIFIER_MAX_TOKENS", "8192"))
 
 # Maximum high-confidence untraceable claims before QA fails.
@@ -130,7 +130,7 @@ def _resolve_zai_messages_url() -> str:
 
 def call_verifier(system_prompt: str | None, user_prompt: str,
                   temperature: float = 0.2, timeout: int = 180) -> str:
-    """Call the independent verification model (GLM-5.1 via Z.ai by default).
+    """Call the independent verification model (GLM-5.2 via Z.ai by default).
 
     Uses Z.ai's Anthropic-compatible Messages API — the same endpoint and
     coding-plan subscription Claude Code uses — so it does not draw on prepaid

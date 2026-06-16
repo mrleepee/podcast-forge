@@ -1,7 +1,7 @@
 """
 check_verification — Independent verification of a script against its evidence map.
 
-Phase 8 of the hybrid pipeline. An independent model (GLM-5.1 via Z.ai by
+Phase 8 of the hybrid pipeline. An independent model (GLM-5.2 via Z.ai by
 default) compares the drafted script to the evidence map and flags claims that
 are not traceable to the evidence. Scripts with more than the configured
 threshold of high-confidence untraceable claims fail content QA.
