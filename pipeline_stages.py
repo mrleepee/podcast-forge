@@ -16,53 +16,22 @@ import urllib.request
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Shared MiniMax call — sends system+user prompts, uses same API as
-# _summarize_with_minimax but with the stage-specific system prompt
+# Shared GLM call for the evidence-first stages — delegates to
+# video_downloader._call_llm (Z.ai Anthropic-compatible API, glm-5.2 by
+# default) so each stage inherits the hard wall-clock timeout + retry.
 # ---------------------------------------------------------------------------
 
-_MINIMAX_API_URLS = [
-    "https://api.minimax.chat/v1/text/chatcompletion_v2",
-    "https://api.minimax.io/v1/text/chatcompletion_v2",
-]
 
+def _call_llm(system_prompt: str | None, user_prompt: str,
+              temperature: float = 0.3) -> str:
+    """Call GLM with a system + user prompt and return the response text.
 
-def _call_minimax(system_prompt: str, user_prompt: str,
-                  temperature: float = 0.3) -> str:
-    """Call MiniMax API with a system + user prompt.
-
-    Uses the same model (MiniMax-M2.7) and URL rotation as the existing
-    _summarize_with_minimax, but sends a proper system message so the
-    stage-specific agent persona is applied.
+    Thin wrapper over ``video_downloader._call_llm`` so the extraction/outline
+    stages (and the tests) keep a stable seam to monkeypatch. Raises
+    RuntimeError if GLM config is unavailable or every attempt fails.
     """
-    api_key = os.environ.get("MINIMAX_API_KEY")
-    if not api_key:
-        raise RuntimeError("MINIMAX_API_KEY not set")
-
-    payload = json.dumps({
-        "model": "MiniMax-M2.7",
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        "temperature": temperature,
-    }).encode("utf-8")
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}",
-    }
-    # Reuse video_downloader's hard-timeout+retry helper so a hung MiniMax call
-    # (slow-drip SSL read) is abandoned after hard_timeout and retried, instead
-    # of hanging the whole pipeline for 10+ minutes.
-    from video_downloader import _minimax_post_json
-    try:
-        body = _minimax_post_json(payload, headers)
-    except RuntimeError as e:
-        raise RuntimeError(str(e))
-    choices = body.get("choices") or []
-    if not choices:
-        raise RuntimeError(f"Unexpected MiniMax response: {body}")
-    return choices[0].get("message", {}).get("content", "").strip()
+    from video_downloader import _call_llm as _vd_call_llm
+    return _vd_call_llm(system_prompt, user_prompt, temperature=temperature)
 
 
 # ---------------------------------------------------------------------------
@@ -305,7 +274,7 @@ def extract_evidence(text: str) -> list[dict]:
 
     prompt = f"Extract all evidence from the following text:\n\n{text}"
 
-    response = _call_minimax(EXTRACTION_SYSTEM_PROMPT, prompt)
+    response = _call_llm(EXTRACTION_SYSTEM_PROMPT, prompt)
 
     # Parse JSON from response
     try:
@@ -389,7 +358,7 @@ def generate_outline(evidence: list[dict], soul_text: str) -> dict:
         f"Show bible (SOUL.md):\n{soul_excerpt}"
     )
 
-    response = _call_minimax(OUTLINE_SYSTEM_PROMPT, prompt)
+    response = _call_llm(OUTLINE_SYSTEM_PROMPT, prompt)
 
     try:
         match = re.search(r'\{.*\}', response, re.DOTALL)

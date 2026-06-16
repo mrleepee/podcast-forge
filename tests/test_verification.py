@@ -32,7 +32,7 @@ class TestFullContextExtraction:
             return '[{"claim": "x", "source_quote": "x", "timestamp": "para:0", ' \
                    '"source_reliability": "secondary", "confidence": "high", "type": "fact"}]'
 
-        monkeypatch.setattr(pipeline_stages, "_call_minimax", fake_call)
+        monkeypatch.setattr(pipeline_stages, "_call_llm", fake_call)
 
         # ~15k words, well under the cap and far over the old 8k-char limit.
         transcript = ("Liberland declared independence in 2015. " * 2000)
@@ -54,7 +54,7 @@ class TestFullContextExtraction:
             return '[{"claim": "x", "source_quote": "x", "timestamp": "para:0", ' \
                    '"source_reliability": "secondary", "confidence": "high", "type": "fact"}]'
 
-        monkeypatch.setattr(pipeline_stages, "_call_minimax", fake_call)
+        monkeypatch.setattr(pipeline_stages, "_call_llm", fake_call)
 
         transcript = "word " * 40000  # 200k chars
         assert len(transcript) > 150_000
