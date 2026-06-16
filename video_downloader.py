@@ -140,7 +140,7 @@ def parse_arguments():
     parser.add_argument(
         "--summarize",
         action="store_true",
-        help="Download English subtitles (or transcribe via whisper), then summarize with MiniMax.",
+        help="Download English subtitles (or transcribe via whisper), then summarize with GLM.",
     )
     parser.add_argument(
         "--podcast",
@@ -1058,100 +1058,79 @@ def download_video(
 # Transcription & Summarization
 # ---------------------------------------------------------------------------
 
-_MINIMAX_API_URLS = [
-    "https://api.minimax.io/v1/text/chatcompletion_v2",
-    "https://api.minimax.chat/v1/text/chatcompletion_v2",
-]
+# ---------------------------------------------------------------------------
+# GLM (Z.ai) — the pipeline's sole LLM backend.
+#
+# Uses Z.ai's Anthropic-compatible Messages API (the same coding-plan
+# subscription Claude Code uses), so generation draws no prepaid API credits.
+# Config is resolved from env (ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN /
+# PODCAST_LLM_MODEL) with a fallback to ~/.claude/settings-GLM.json — the same
+# source the verifier (pipeline_stages.call_verifier) reads its key from.
+#
+# urllib's per-operation timeout does not fire on slow-drip SSL reads, so a call
+# can hang for many minutes with no exception under degraded network conditions
+# (observed: 10+ minute hangs). Each attempt runs in a daemon worker thread that
+# is abandoned if it exceeds ``hard_timeout`` seconds; attempts retry on hang or
+# error. Returns the model's text, or raises RuntimeError if every attempt fails.
+# ---------------------------------------------------------------------------
+
+_GLM_SETTINGS_PATH = Path.home() / ".claude" / "settings-GLM.json"
+_GLM_ANTHROPIC_VERSION = "2023-06-01"
 
 
-def _minimax_post_json(payload, headers, hard_timeout=120, attempts=4):
-    """POST to MiniMax with a hard wall-clock timeout and retry.
+def _read_glm_settings() -> dict:
+    """Return the env block of ~/.claude/settings-GLM.json (empty on failure)."""
+    try:
+        settings = json.loads(_GLM_SETTINGS_PATH.read_text(encoding="utf-8"))
+        env = settings.get("env", {})
+        return env if isinstance(env, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
 
-    urllib's per-operation timeout does not fire on slow-drip SSL reads, so a
-    MiniMax call can hang for many minutes with no exception under degraded
-    network conditions (observed: 10+ minute hangs on the narration/QA calls).
-    Each attempt runs in a daemon worker thread that is abandoned if it exceeds
-    ``hard_timeout`` seconds; attempts rotate across the fallback URLs and retry
-    on hang or error. Returns the parsed JSON response body, or raises
-    RuntimeError if every attempt fails.
 
-    If ``PODCAST_LLM_PREFER_GLM`` is set, skip MiniMax entirely and route
-    straight to the glm endpoint — used when MiniMax is flaky/down so its slow
-    hang-timeout does not stall every call.
+def _resolve_glm_config():
+    """Resolve (base_url, api_token, model) for GLM generation.
+
+    Each field: explicit env var first, then ~/.claude/settings-GLM.json.
+    ``model`` defaults to glm-5.2 (override with PODCAST_LLM_MODEL). Raises
+    RuntimeError if base/token are unavailable, so callers can degrade gracefully.
     """
-    if os.environ.get("PODCAST_LLM_PREFER_GLM"):
-        return _glm_post_json(payload, hard_timeout=hard_timeout, attempts=attempts)
-    import threading
-    import time
-    last_error = None
-    for attempt in range(attempts):
-        api_url = _MINIMAX_API_URLS[attempt % len(_MINIMAX_API_URLS)]
-        box = {}
-
-        def _work(u=api_url):
-            try:
-                req = urllib.request.Request(u, data=payload, headers=headers)
-                with urllib.request.urlopen(req, timeout=60) as resp:
-                    box["body"] = resp.read()
-            except urllib.error.HTTPError as e:
-                box["http"] = (e.code, e.read().decode("utf-8", errors="replace"))
-            except Exception as e:
-                box["err"] = f"{type(e).__name__}: {e}"
-
-        worker = threading.Thread(target=_work, daemon=True)
-        worker.start()
-        worker.join(hard_timeout)
-        if worker.is_alive():
-            last_error = f"hard timeout >{hard_timeout}s ({api_url})"
-            print(f"    MiniMax call hung >{hard_timeout}s, retry {attempt + 1}/{attempts}")
-            continue
-        if "body" in box:
-            return json.loads(box["body"].decode("utf-8"))
-        if "http" in box:
-            last_error = f"MiniMax API error {box['http'][0]} ({api_url}): {box['http'][1]}"
-        else:
-            last_error = f"MiniMax error ({api_url}): {box.get('err')}"
-        time.sleep(1)
-    # MiniMax exhausted (down/hanging/flaky path) — fall back to the
-    # Anthropic-compatible glm endpoint so production can't be blocked by a
-    # degraded MiniMax path. Cron envs where MiniMax holds never reach here.
-    print(f"    MiniMax unavailable ({last_error}); falling back to glm endpoint...")
-    return _glm_post_json(payload, hard_timeout=hard_timeout, attempts=attempts)
-
-
-def _glm_post_json(payload, hard_timeout=120, attempts=4):
-    """Call the Anthropic-compatible glm endpoint, adapting a MiniMax-style
-    payload (model/messages[/temperature], optional system role) to the
-    Anthropic Messages API and returning a MiniMax-shaped body
-    (``{"choices":[{"message":{"content": ...}}]}``) so every existing call site
-    parses unchanged. Uses the same daemon-thread hard timeout + retry as the
-    MiniMax path."""
-    import threading
-    import time
-    base = os.environ.get("ANTHROPIC_BASE_URL", "").rstrip("/")
-    token = os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
-    model = os.environ.get("ANTHROPIC_DEFAULT_SONNET_MODEL", "glm-4.5-air")
+    settings = _read_glm_settings()
+    base = (os.environ.get("ANTHROPIC_BASE_URL") or settings.get("ANTHROPIC_BASE_URL") or "").rstrip("/")
+    token = os.environ.get("ANTHROPIC_AUTH_TOKEN") or settings.get("ANTHROPIC_AUTH_TOKEN") or ""
+    model = os.environ.get("PODCAST_LLM_MODEL") or settings.get("PODCAST_LLM_MODEL") or "glm-5.2"
     if not base or not token:
-        raise RuntimeError("glm fallback unavailable: ANTHROPIC_BASE_URL/ANTHROPIC_AUTH_TOKEN not set")
+        raise RuntimeError(
+            "GLM config unavailable: set ANTHROPIC_BASE_URL/ANTHROPIC_AUTH_TOKEN "
+            f"(or the env block in {_GLM_SETTINGS_PATH})"
+        )
+    return base, token, model
 
-    req = json.loads(payload.decode("utf-8"))
-    system, user_messages = None, []
-    for m in req.get("messages", []):
-        if m.get("role") == "system":
-            system = m.get("content", "")
-        else:
-            user_messages.append({"role": m.get("role", "user"), "content": m.get("content", "")})
-    anthropic_req = {"model": model, "max_tokens": 4096, "messages": user_messages}
+
+def _call_llm(system, user, *, temperature=0.3, max_tokens=4096,
+              hard_timeout=120, attempts=4):
+    """Call GLM (Z.ai Anthropic-compatible API) and return the response text.
+
+    Builds an Anthropic Messages payload, posts it with a daemon-thread hard
+    wall-clock timeout + retry (defeats slow-drip SSL hangs that urllib's per-op
+    timeout misses), and returns the stripped response text. Raises RuntimeError
+    if every attempt fails or GLM config is unavailable.
+    """
+    import threading
+    import time
+    base, token, model = _resolve_glm_config()
+    body = {"model": model, "max_tokens": max_tokens,
+            "messages": [{"role": "user", "content": user}]}
     if system:
-        anthropic_req["system"] = system
-    if "temperature" in req:
-        anthropic_req["temperature"] = req["temperature"]
-    data = json.dumps(anthropic_req).encode("utf-8")
+        body["system"] = system
+    if temperature is not None:
+        body["temperature"] = temperature
+    data = json.dumps(body).encode("utf-8")
     headers = {
         "Content-Type": "application/json",
         "x-api-key": token,
         "authorization": f"Bearer {token}",
-        "anthropic-version": "2023-06-01",
+        "anthropic-version": _GLM_ANTHROPIC_VERSION,
     }
     last_error = None
     for attempt in range(attempts):
@@ -1172,17 +1151,19 @@ def _glm_post_json(payload, hard_timeout=120, attempts=4):
         worker.join(hard_timeout)
         if worker.is_alive():
             last_error = f"hard timeout >{hard_timeout}s"
+            print(f"    GLM call hung >{hard_timeout}s, retry {attempt + 1}/{attempts}")
             continue
         if "body" in box:
             an = json.loads(box["body"].decode("utf-8"))
-            text = "".join(b.get("text", "") for b in (an.get("content") or []) if b.get("type") == "text")
-            return {"choices": [{"message": {"content": text}}]}
+            return "".join(
+                b.get("text", "") for b in (an.get("content") or []) if b.get("type") == "text"
+            ).strip()
         if "http" in box:
-            last_error = f"glm API error {box['http'][0]}: {box['http'][1][:200]}"
+            last_error = f"GLM API error {box['http'][0]}: {box['http'][1][:200]}"
         else:
-            last_error = f"glm error: {box.get('err')}"
+            last_error = f"GLM error: {box.get('err')}"
         time.sleep(1)
-    raise RuntimeError(f"glm failed after {attempts} attempts: {last_error}")
+    raise RuntimeError(f"GLM failed after {attempts} attempts: {last_error}")
 
 
 def _vtt_to_text(vtt_path):
@@ -1225,16 +1206,8 @@ def _transcribe_with_whisper(video_path):
         shutil.rmtree(output_dir, ignore_errors=True)
 
 
-def _summarize_with_minimax(transcript, video_title=""):
-    """Send transcript to MiniMax and return the summary text."""
-    api_key = os.environ.get("MINIMAX_API_KEY")
-    if not api_key:
-        print("Error: MINIMAX_API_KEY not set. Create a .env file with MINIMAX_API_KEY=...")
-        return None
-
-    import urllib.request
-    import urllib.error
-
+def _summarize_with_llm(transcript, video_title=""):
+    """Send transcript to GLM and return the summary text (None on failure)."""
     title_ctx = f' titled "{video_title}"' if video_title else ""
     prompt = (
         f"Summarize the following video transcript{title_ctx} in English. "
@@ -1242,29 +1215,12 @@ def _summarize_with_minimax(transcript, video_title=""):
         "Use bullet points for the main topics.\n\n"
         f"--- TRANSCRIPT START ---\n{transcript}\n--- TRANSCRIPT END ---"
     )
-
-    payload = json.dumps({
-        "model": "MiniMax-M2.7",
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.3,
-    }).encode("utf-8")
-
-    print("Summarizing with MiniMax...")
-    last_error = None
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}",
-    }
+    print("Summarizing with GLM...")
     try:
-        body = _minimax_post_json(payload, headers)
+        return _call_llm(None, prompt, temperature=0.3)
     except RuntimeError as e:
         print(str(e))
         return None
-    choices = body.get("choices") or []
-    if choices:
-        return choices[0].get("message", {}).get("content", "").strip()
-    print(f"Unexpected MiniMax response: {body}")
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -1303,16 +1259,11 @@ def _target_word_count(video_duration_seconds):
 
 def _narrate_as_podcast(summary_text, video_title="", extra_prompt="",
                         target_words=700, language="en", duo=False):
-    """Convert a bullet-point summary into a podcast-style narration via MiniMax.
+    """Convert a bullet-point summary into a podcast-style narration via GLM.
 
     language: "en" for British English, "es" for beginner-friendly Spanish.
     duo: if True, generate two-speaker dialogue (Host/Co-host) instead of solo.
     """
-    api_key = os.environ.get("MINIMAX_API_KEY")
-    if not api_key:
-        print("Error: MINIMAX_API_KEY not set.")
-        return None
-
     title_ctx = f' about "{video_title}"' if video_title else ""
 
     if duo:
@@ -1440,26 +1391,12 @@ def _narrate_as_podcast(summary_text, video_title="", extra_prompt="",
         f"\n--- SUMMARY START ---\n{summary_text}\n--- SUMMARY END ---"
     )
 
-    payload = json.dumps({
-        "model": "MiniMax-M2.7",
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.4,
-    }).encode("utf-8")
-
     print(f"Generating {'Spanish' if language == 'es' else 'podcast'} narration...")
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}",
-    }
     try:
-        body = _minimax_post_json(payload, headers)
+        return _call_llm(None, prompt, temperature=0.4, max_tokens=8192)
     except RuntimeError as e:
         print(str(e))
         return None
-    choices = body.get("choices") or []
-    if choices:
-        return choices[0].get("message", {}).get("content", "").strip()
-    return None
 
 
 def _load_tts_prompt(language="en", duo=False):
@@ -1509,63 +1446,27 @@ def _polish_bilingual_tts(narrative_text):
 
 def _polish_for_tts_raw(narrative_text, language="en"):
     """Polish narration text for TTS without bilingual awareness."""
-    api_key = os.environ.get("MINIMAX_API_KEY")
-    if not api_key:
-        return narrative_text
-
     prompt = _load_tts_prompt(language=language, duo=False)
-
-    payload = json.dumps({
-        "model": "MiniMax-M2.7",
-        "messages": [{"role": "user", "content": prompt + "\n" + narrative_text}],
-        "temperature": 0.1,
-    }).encode("utf-8")
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}",
-    }
     try:
-        body = _minimax_post_json(payload, headers)
-        choices = body.get("choices") or []
-        if choices:
-            return choices[0].get("message", {}).get("content", "").strip()
+        return _call_llm(None, prompt + "\n" + narrative_text, temperature=0.1)
     except RuntimeError as e:
         print(f"TTS polish error: {e}")
-    return narrative_text
+        return narrative_text
 
 
 def _polish_for_tts(narrative_text, language="en", duo=False):
     """Polish narration text for natural TTS reading using comprehensive rules."""
-    api_key = os.environ.get("MINIMAX_API_KEY")
-    if not api_key:
-        return narrative_text
-
     # For bilingual EN:/ES: text, polish EN and ES lines separately
     if narrative_text.lstrip().startswith("EN:") or "\nEN:" in narrative_text:
         return _polish_bilingual_tts(narrative_text)
 
     prompt = _load_tts_prompt(language=language, duo=duo)
-
-    payload = json.dumps({
-        "model": "MiniMax-M2.7",
-        "messages": [{"role": "user", "content": prompt + "\n" + narrative_text}],
-        "temperature": 0.1,
-    }).encode("utf-8")
-
     print("Polishing narration for TTS...")
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}",
-    }
     try:
-        body = _minimax_post_json(payload, headers)
-        choices = body.get("choices") or []
-        if choices:
-            return choices[0].get("message", {}).get("content", "").strip()
+        return _call_llm(None, prompt + "\n" + narrative_text, temperature=0.1)
     except RuntimeError as e:
         print(f"TTS polish error: {e}")
-    return narrative_text
+        return narrative_text
 
 
 _BRITISH_VOICES = [
@@ -2441,13 +2342,6 @@ def _display_similarity_table(matches):
 
 def _check_sponsored_content(summary_text, source_label=""):
     """Check if content looks like sponsored product marketing. Returns (score, reason) or None."""
-    api_key = os.environ.get("MINIMAX_API_KEY")
-    if not api_key:
-        return None
-
-    import urllib.request
-    import urllib.error
-
     label_ctx = f" (source: {source_label})" if source_label else ""
     prompt = (
         "You are a media literacy analyst. Read the following content summary"
@@ -2465,27 +2359,14 @@ def _check_sponsored_content(summary_text, source_label=""):
         f"\n--- CONTENT START ---\n{summary_text[:3000]}\n--- CONTENT END ---"
     )
 
-    payload = json.dumps({
-        "model": "MiniMax-M2.7",
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.1,
-    }).encode("utf-8")
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}",
-    }
     try:
-        body = _minimax_post_json(payload, headers, hard_timeout=60, attempts=3)
+        text = _call_llm(None, prompt, temperature=0.1, hard_timeout=60, attempts=3)
     except RuntimeError:
         return None
-    choices = body.get("choices") or []
-    if choices:
-        text = choices[0].get("message", {}).get("content", "").strip()
-        score_match = re.search(r"SCORE:\s*(\d+)", text)
-        reason_match = re.search(r"REASON:\s*(.+)", text)
-        if score_match:
-            return int(score_match.group(1)), (reason_match.group(1).strip() if reason_match else "")
+    score_match = re.search(r"SCORE:\s*(\d+)", text)
+    reason_match = re.search(r"REASON:\s*(.+)", text)
+    if score_match:
+        return int(score_match.group(1)), (reason_match.group(1).strip() if reason_match else "")
     return None
 
 
@@ -2982,7 +2863,7 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
             print(f"English podcast already exists: {en_mp3}")
         else:
             if en_txt.exists():
-                print(f"English narration exists, skipping MiniMax")
+                print(f"English narration exists, skipping narration generation")
                 en_narrative = en_txt.read_text(encoding="utf-8")
             else:
                 en_narrative = _narrate_as_podcast(
@@ -3006,7 +2887,7 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
         print(f"Spanish podcast already exists: {es_mp3}")
     else:
         if es_txt.exists():
-            print(f"Spanish narration exists, skipping MiniMax")
+            print(f"Spanish narration exists, skipping narration generation")
             es_narrative = es_txt.read_text(encoding="utf-8")
         else:
             es_narrative = _narrate_as_podcast(
@@ -3325,8 +3206,8 @@ def summarize_video(result, video_title=""):
         print("Could not obtain a transcript — skipping summarization.")
         return None
 
-    # 3. Summarize with MiniMax
-    summary = _summarize_with_minimax(transcript, video_title=video_title)
+    # 3. Summarize with GLM
+    summary = _summarize_with_llm(transcript, video_title=video_title)
     if not summary:
         return None
 

@@ -1,11 +1,7 @@
 #!/usr/bin/env python3
-"""Convert summary markdown files to narrative audio using MiniMax + Kokoro."""
+"""Convert summary markdown files to narrative audio using GLM + Kokoro."""
 
-import json
 import os
-import sys
-import urllib.request
-import urllib.error
 from pathlib import Path
 
 
@@ -27,20 +23,11 @@ from kokoro import KPipeline
 import soundfile as sf
 
 
-MINIMAX_API_URLS = [
-    "https://api.minimax.io/v1/text/chatcompletion_v2",
-    "https://api.minimax.chat/v1/text/chatcompletion_v2",
-]
 VOICE = "bf_emma"
 SAMPLE_RATE = 24000
 
 
 def to_narrative(markdown_text):
-    api_key = os.environ.get("MINIMAX_API_KEY")
-    if not api_key:
-        print("Error: MINIMAX_API_KEY not set")
-        return None
-
     prompt = (
         "Rewrite the following video summary as a flowing narrative suitable for "
         "a text-to-speech voiceover. Use conversational English with a British tone. "
@@ -49,31 +36,12 @@ def to_narrative(markdown_text):
         "and key facts but present them as if a presenter is telling the story.\n\n"
         f"--- SUMMARY START ---\n{markdown_text}\n--- SUMMARY END ---"
     )
-
-    payload = json.dumps({
-        "model": "MiniMax-M2.7",
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.3,
-    }).encode("utf-8")
-
-    for api_url in MINIMAX_API_URLS:
-        req = urllib.request.Request(
-            api_url, data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}",
-            },
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=120) as resp:
-                body = json.loads(resp.read().decode("utf-8"))
-            choices = body.get("choices") or []
-            if choices:
-                return choices[0].get("message", {}).get("content", "").strip()
-        except urllib.error.HTTPError as e:
-            err = e.read().decode("utf-8", errors="replace")
-            print(f"MiniMax error {e.code}: {err}")
-    return None
+    from video_downloader import _call_llm
+    try:
+        return _call_llm(None, prompt, temperature=0.3)
+    except RuntimeError as e:
+        print(f"GLM error: {e}")
+        return None
 
 
 def text_to_audio(text, output_path, voice=VOICE):
@@ -110,7 +78,7 @@ def main():
         md_text = f.read_text(encoding="utf-8")
 
         if txt_path.exists():
-            print(f"  Narrative exists, skipping MiniMax")
+            print(f"  Narrative exists, skipping narrative generation")
             narrative = txt_path.read_text(encoding="utf-8")
         else:
             print(f"  Converting to narrative...")

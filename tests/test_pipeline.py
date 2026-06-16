@@ -152,7 +152,7 @@ class TestScriptDrafting:
                      "source_quote": "the agent dies", "timestamp": "para:0",
                      "source_reliability": "primary", "confidence": "high",
                      "type": "fact"}]
-        # Can't call draft_script without MiniMax, but can test the
+        # Can't call draft_script without GLM, but can test the
         # structured_input construction by importing internals
         from pipeline_stages import draft_script
         # Verify the function signature accepts all required params

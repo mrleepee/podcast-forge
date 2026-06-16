@@ -6,6 +6,11 @@ catch factual drift before audio.
 
 **Initiative:** Podcast quality upgrade — pipeline optimisation
 **Status:** draft (revised 2026-06-03 after review)
+**Update 2026-06-16:** MiniMax was removed from the pipeline — generation AND
+verification now both run on GLM (glm-5.2) via Z.ai's Anthropic-compatible API.
+The "MiniMax generates, GLM verifies" allocation below is retained as the original
+design rationale, but the generation premise is superseded. See the struck-through
+lines in Constraints.
 **Related spec:** `evidence-first-pipeline.md` (this builds on it)
 
 ## Revision note (2026-06-03)
@@ -130,11 +135,11 @@ See Appendix B1 for the verification prompt schema.
 ## Constraints
 
 - **Use full model context.** Send the whole transcript (cap ~150k chars). No chunking until sources exceed the cap (~10 hours of audio), which the show does not produce.
-- **Generation stays on MiniMax-M2.7.** Extraction, outline, and drafting use the already-wired MiniMax API — one generation dependency, no proven reason to split.
+- **~~Generation stays on MiniMax-M2.7.~~ Superceded 2026-06-16:** generation now runs on GLM-5.2 (MiniMax removed). Extraction, outline, and drafting use the GLM (Z.ai) API — one generation dependency, no proven reason to split.
 - **Verification SHOULD use a different model than the drafter.** An independent checker decorrelates errors. GLM-5.1 via Z.ai is the default; MiniMax-only is an acceptable fallback. This allocation is a hypothesis to validate by blind A/B on real scripts, not a proven win.
 - **Verification is best-effort, not a hard dependency.** If the verification API is unavailable, skip with a warning; do not block an episode on a second external service.
 - **Backward compatible.** The existing pipeline (full MiniMax, no verification) remains the default until verification is validated.
-- **API keys.** `MINIMAX_API_KEY` is required; `ZAI_API_KEY` is optional (enables verification).
+- **API keys.** GLM credentials resolve from `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` env or `~/.claude/settings-GLM.json`; `ZAI_API_KEY` optionally overrides the key (used for verification).
 
 ## Dependencies
 
