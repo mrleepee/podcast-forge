@@ -66,6 +66,36 @@ def load_episode_metadata(metadata_path):
     return {}
 
 
+# Acronyms preserved as all-caps when title-casing a slug-derived fallback title
+# (e.g. "ai" -> "AI", not "Ai"). Episodes SHOULD carry a real title in
+# episodes.json; this only governs the last-resort slug fallback for episodes
+# that lack one.
+_ACRONYMS = {
+    "ai", "api", "llm", "html", "url", "roi", "cbi", "gdp", "ceo", "cfo",
+    "cto", "coo", "usa", "uk", "eu", "glm", "mcp", "okf", "dsl", "gpu",
+    "cpu", "ipa", "ios", "sos", "sri", "doj", "sec", "nyse", "nasdaq",
+    "imf", "wto", "nato", "sdk", "ide",
+}
+
+
+def title_from_slug(stem):
+    """Derive a readable title from an episode slug (fallback when episodes.json
+    has no title for it). Title-cases the slug but preserves known acronyms as
+    all-caps so 'ai' becomes 'AI', not 'Ai'. Plurals are handled as 'S'
+    ('llms' -> 'LLMs')."""
+    base = re.sub(r"^ep\d+\s*", "", stem.replace("-", " ")).strip().title()
+    out = []
+    for word in base.split():
+        bare = word.strip(".,:;!?\"'()").lower()
+        if bare in _ACRONYMS:
+            out.append(bare.upper())
+        elif bare.endswith("s") and bare[:-1] in _ACRONYMS:
+            out.append(bare[:-1].upper() + "s")
+        else:
+            out.append(word)
+    return " ".join(out)
+
+
 def find_podcast_episodes(downloads_dir, metadata=None, suffix=".podcast.mp3", exclude=None):
     """Find podcast MP3 files with their metadata.
 
@@ -87,7 +117,7 @@ def find_podcast_episodes(downloads_dir, metadata=None, suffix=".podcast.mp3", e
             continue
         meta = metadata.get(stem, {})
 
-        title = meta.get("title", re.sub(r"^ep\d+\s*", "", stem.replace("-", " ")).strip().title())
+        title = meta.get("title", title_from_slug(stem))
         description = meta.get("description", "")
 
         duration = get_audio_duration(mp3_path)
