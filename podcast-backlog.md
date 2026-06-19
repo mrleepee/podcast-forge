@@ -1,6 +1,7 @@
 # Podcast Production Backlog
 
 ## Published from this backlog
+- ep156 — (item #19) ep156-microsoft-skillopt-end-end-lifecycle-llm-skills
 - ep155 — (item #10) ep155-bayraktar-giant-monopolies-are-trying-control-ai
 - ep154 — (item #1) ep154-inside-claude-fable-5-system-prompt-cl4r1t4s-leak
 - ep153 — (item #24) ep153-matt-pocock-its-not-model-its-harness
@@ -131,7 +132,7 @@ Liberland episodes spaced with 4 non-Liberland between each.
     - Flags: default (~5 min)
     - Notes: @sotontimes (a UK emigration/tax/expat content account) shares a viral short, **"10 reasons to leave the UK! 🇬🇧🛫"** — a teaser for a full guide (sold via "link in bio"). The caption flags reason 10 as "a real game changer, especially for those wanting to stay legal and pay LESS tax… (it doesn't actually involve leaving the UK itself)" — i.e. a UK tax-residence / non-dom-style optimisation angle layered onto an emigration pitch. **Read the actual 10 reasons from the video before writing**: the post is a teaser and the detail lives in the clip (and a gated paid guide), so enumerate the real reasons from the video rather than inventing them. **Fact-check / editorial (critical)**: UK tax-residence law changed materially — the old non-dom regime was **abolished from 6 April 2025** and replaced by the 4-year "foreign income and gains" (FIG) regime, with new rules on the Statutory Residence Test, split-year treatment, and the £1m foreign-income exemption; any "pay less tax legally without leaving" claim must be verified against **2025/26** HMRC rules, not pre-2025 non-dom advice (a lot of viral content here is now outdated or wrong). Frame tax mechanics as "the video claims / the guide suggests," verify each against HMRC, and don't present emigration as a one-size-fits-all win. **Sponsorship gate note**: the account monetises via the "full guide" (link in bio), so the content is partly promotional — the sponsorship gate may flag it; if so, `--force` is appropriate once the topic is confirmed as genuine emigration/tax education rather than a product ad. Connects to the show's Nomad beat: ep127 (Istanbul real estate / Turkish CBI), ep123 (Izmir neighbourhood guide), ep104 (Uganda real estate for foreigners), ep93 (Georgia corporate structures for nomads). Señora Freedom angle: leaving a high-tax jurisdiction — or legally reducing its reach without leaving — is the sovereignty-by-exit move the nomad track is about; the question is which exit routes still actually work under the post-2025 UK rules.
 
-19. 🤖 **Microsoft's SkillOpt: The End-to-End Lifecycle of LLM Skills**
+19. ~~🤖 **Microsoft's SkillOpt: The End-to-End Lifecycle of LLM Skills**~~ — ✅ PUBLISHED as **ep156** (ep156-microsoft-skillopt-end-end-lifecycle-llm-skills)
     - Category: AI
     - Source: https://microsoft.github.io/SkillOpt (project page) + commentary reel: https://www.instagram.com/reels/DZpdnBVx6xL/
     - Type: URL-based (research-framework project page)
