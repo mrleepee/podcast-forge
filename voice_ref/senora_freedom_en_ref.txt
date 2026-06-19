@@ -1,1 +1,1 @@
-Drop the debugging so it knows what to preserve. Then there is clear, which wipes everything, but you write down what matters.
+Imagine a scientific field that has spent decades building a timeline of human history only to have a journalist.

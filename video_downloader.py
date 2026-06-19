@@ -1516,19 +1516,19 @@ if _OMNI_REF_AUDIO:
         _OMNI_REF_TEXT = _ref_txt_path.read_text().strip()
 
 _REF_CLIP_VALIDATED = False  # guard: validate once per process
+_LAST_SEG_DIR = None         # set only under OMNIVOICE_KEEP_SEGS (seam QC hook)
 
 # Strict mode: a clone reference that ends mid-speech or whose transcript doesn't
-# match the audio is the documented root cause of per-chunk echo. When enabled,
-# rendering with a known-defective reference STOPS the run rather than logging and
-# proceeding — same fail-closed principle as the publish gate (P2.2).
+# match the audio is the documented root cause of per-chunk echo (voiced reference
+# fragments bleeding into inter-word gaps). When enabled, rendering with a known-
+# defective reference STOPS the run rather than logging and proceeding — same
+# fail-closed principle as the publish gate (P2.2).
 #
-# Defaults OFF: the shipped reference clip is *currently* defective (ends
-# mid-speech, 0ms trailing silence) and re-cutting it is a human asset task (see
-# voice_ref/ and the omnivoice spec Appendix D). Turning strict on before the
-# re-cut would halt all production. Flip the default to "1" (or set
-# OMNIVOICE_REF_STRICT=1) the moment a clean clip lands — the warning already
-# prints loudly every run until then.
-_OMNI_REF_STRICT = os.environ.get("OMNIVOICE_REF_STRICT", "0").lower() not in ("0", "false", "no")
+# Defaults ON (2026-06-18): the shipped reference clip was re-cut from a clean,
+# complete sentence (see voice_ref/), so a defective clip can no longer ship
+# silently. Set OMNIVOICE_REF_STRICT=0 only to override during an intentional
+# re-cut in progress.
+_OMNI_REF_STRICT = os.environ.get("OMNIVOICE_REF_STRICT", "1").lower() not in ("0", "false", "no")
 
 # Substrings marking a ref-clip warning as FATAL (misalignment / echo conditions).
 _FATAL_REF_MARKERS = (
@@ -1861,7 +1861,14 @@ def _omnivoice_render(segments, output_mp3_path, *, silence_sec=0.12):
         print(f"  OmniVoice MP3 saved: {output_mp3_path} ({size_mb:.1f}MB, {duration/60:.1f}min)")
         return True
     finally:
-        shutil.rmtree(tmpdir, ignore_errors=True)
+        # Diagnostic hook (P2.2 Phase 4): keep the per-segment WAVs so checks/seam_qc.py
+        # can run on a real render. No-op unless OMNIVOICE_KEEP_SEGS is set.
+        if os.environ.get("OMNIVOICE_KEEP_SEGS"):
+            global _LAST_SEG_DIR
+            _LAST_SEG_DIR = tmpdir
+            print(f"  OmniVoice: KEEP_SEGS — segment WAVs preserved at {tmpdir}")
+        else:
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def _generate_omnivoice_audio(narrative_text, output_mp3_path, lang="en", mode="solo"):
