@@ -1,6 +1,7 @@
 # Podcast Production Backlog
 
 ## Published from this backlog
+- ep155 — (item #10) ep155-bayraktar-giant-monopolies-are-trying-control-ai
 - ep154 — (item #1) ep154-inside-claude-fable-5-system-prompt-cl4r1t4s-leak
 - ep153 — (item #24) ep153-matt-pocock-its-not-model-its-harness
 - ep152 — (item #17) ep152-why-ubi-trap-youll-rent-everything-own-nothing
@@ -80,7 +81,7 @@ Liberland episodes spaced with 4 non-Liberland between each.
 
 9. ~~🤖 **Dive into Claude Code: The Design Space of AI Agent Systems**~~ — ✅ ALREADY PUBLISHED as **ep143**
 
-10. 🏛️ **Bayraktar: Giant Monopolies Are Trying to Control AI**
+10. ~~🏛️ **Bayraktar: Giant Monopolies Are Trying to Control AI**~~ — ✅ PUBLISHED as **ep155** (ep155-bayraktar-giant-monopolies-are-trying-control-ai)
    - Category: Libertarian
    - Source: https://x.com/SprinterPress/status/2065821833769664914/video/1
    - Type: URL-based
