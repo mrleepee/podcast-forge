@@ -1,6 +1,7 @@
 # Podcast Production Backlog
 
 ## Published from this backlog
+- ep151 — (item #4) ep151-demis-hassabis-deepmind-alphafold-digital-biology
 - ep150 — (item #13) ep150-financial-physics-attention-motherfuckers-dig-that-wax-out
 - ep148 — Panama Real Estate: Is Panama City Entering a New Bull Market? (Fact Report)
 - ep127 — Istanbul Real Estate: Renovation Costs and ROI for Turkish CBI
@@ -54,7 +55,7 @@ Liberland episodes spaced with 4 non-Liberland between each.
 2. ~~🏛️ **Bezrukov at SPIEF: "Accept That War Is the New Normal"**~~ — ✅ ALREADY PUBLISHED as **ep139** (removed to prevent duplicate production)
 3. ~~💰 **The AI Bubble Explained**~~ — ✅ ALREADY PUBLISHED as **ep137** (removed to prevent duplicate production)
 
-4. 🤖 **Demis Hassabis: Who Survives the Next 5 Years**
+4. ~~🤖 **Demis Hassabis: Who Survives the Next 5 Years**~~ — ✅ PUBLISHED as **ep151** (ep151-demis-hassabis-deepmind-alphafold-digital-biology)
    - Category: AI
    - Source: https://x.com/spectnfa/status/2063701797252825262/video/1
    - Type: URL-based
