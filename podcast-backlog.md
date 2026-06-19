@@ -1,6 +1,7 @@
 # Podcast Production Backlog
 
 ## Published from this backlog
+- ep154 — (item #1) ep154-inside-claude-fable-5-system-prompt-cl4r1t4s-leak
 - ep153 — (item #24) ep153-matt-pocock-its-not-model-its-harness
 - ep152 — (item #17) ep152-why-ubi-trap-youll-rent-everything-own-nothing
 - ep151 — (item #4) ep151-demis-hassabis-deepmind-alphafold-digital-biology
@@ -47,7 +48,7 @@
 Categories: 🤖 AI · 🏠 Nomad · 🏛️ Libertarian · 💰 Finance · 🎥 Video
 Liberland episodes spaced with 4 non-Liberland between each.
 
-1. 🤖 **Inside the Claude Fable 5 System Prompt (the CL4R1T4S Leak)**
+1. ~~🤖 **Inside the Claude Fable 5 System Prompt (the CL4R1T4S Leak)**~~ — ✅ PUBLISHED as **ep154** (ep154-inside-claude-fable-5-system-prompt-cl4r1t4s-leak)
    - Category: AI
    - Source: https://github.com/elder-plinius/CL4R1T4S/blob/main/ANTHROPIC/CLAUDE-FABLE-5.md
    - Type: URL-based (extracted/leaked system prompt)
