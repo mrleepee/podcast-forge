@@ -168,6 +168,17 @@ def parse_arguments():
         help="Bypass the fail-closed similarity/sponsorship gates (manual override).",
     )
     parser.add_argument(
+        "--expect-topic",
+        metavar="PHRASE",
+        default="",
+        help=(
+            "Abort before narration/TTS if the source content does not match "
+            "this expected topic (guards against backlog URLs that resolve to "
+            "different content). Match is case-insensitive substring/token "
+            "overlap; default OFF."
+        ),
+    )
+    parser.add_argument(
         "--vimeo-hash",
         metavar="HASH",
         help=(
@@ -2899,6 +2910,83 @@ def _queue_skipped_episode(clean_name, video_title, gate, detail, queue_path=Non
     return queue_path
 
 
+_TOPIC_STOPWORDS = {
+    "the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "with",
+    "about", "is", "are", "was", "were", "be", "this", "that", "it", "as",
+    "at", "by", "from", "how", "why", "what", "who", "when", "vs", "on",
+}
+
+
+def _tokenize_topic(text):
+    """Lowercase alphanumeric tokenization for topic matching."""
+    import re as _re
+    return [t for t in _re.findall(r"[a-z0-9]+", text.lower())
+            if len(t) > 1 and t not in _TOPIC_STOPWORDS]
+
+
+def topic_matches(haystack, expected_phrase, *, min_token_overlap=0.5):
+    """Lightweight content-match guard (no new deps).
+
+    Returns (matched: bool, reason: str). A phrase is considered present if
+    EITHER the whole phrase appears as a case-insensitive substring, OR at
+    least ``min_token_overlap`` of its meaningful tokens are found in the
+    haystack (token-overlap catches rewordings like "UK emigration" vs
+    "emigrating from Britain"). Short single-token phrases require that token.
+    """
+    if not expected_phrase or not expected_phrase.strip():
+        return True, "no expectation set"
+    hay = (haystack or "").lower()
+    phrase = expected_phrase.strip()
+    if phrase.lower() in hay:
+        return True, f"phrase '{phrase}' found verbatim"
+    tokens = _tokenize_topic(phrase)
+    if not tokens:
+        return True, "expectation has no matchable tokens"
+    hay_tokens = set(_tokenize_topic(hay))
+    present = [t for t in tokens if t in hay_tokens]
+    ratio = len(present) / len(tokens)
+    if len(tokens) == 1:
+        matched = bool(present)
+    else:
+        matched = ratio >= min_token_overlap
+    if matched:
+        return True, f"{len(present)}/{len(tokens)} key tokens present ({ratio:.0%})"
+    missing = [t for t in tokens if t not in hay_tokens]
+    return False, (f"expected topic '{phrase}' not found — "
+                   f"{len(present)}/{len(tokens)} tokens matched "
+                   f"(missing: {', '.join(missing) if missing else 'all'})")
+
+
+def _load_summary_text(summary_path):
+    """Read a summary file's text, returning '' on any failure."""
+    try:
+        return Path(summary_path).read_text(encoding="utf-8")
+    except (OSError, ValueError):
+        return ""
+
+
+def check_expected_topic(summary_path, expected_topic):
+    """Abort-before-render content guard for --expect-topic.
+
+    Reads the produced summary and verifies it matches the expected topic.
+    Returns True if okay to proceed, False (after printing a clear mismatch)
+    if the source content does not match — callers MUST skip narration/TTS.
+    """
+    summary_text = _load_summary_text(summary_path)
+    if not summary_text:
+        print("  --expect-topic: could not read summary; skipping guard.")
+        return True
+    matched, reason = topic_matches(summary_text, expected_topic)
+    if matched:
+        print(f"  --expect-topic OK: {reason}")
+        return True
+    print("\n  ABORT: --expect-topic mismatch.")
+    print(f"  Expected: {expected_topic}")
+    print(f"  Found:    {reason}")
+    print("  Source content does not match the expected topic — not rendering.")
+    return False
+
+
 def produce_podcast(summary_path, video_title="", podcast_dir=None,
                     extra_prompt="", video_duration_seconds=0, duo=False,
                     pipeline="summary", force=False):
@@ -3286,8 +3374,28 @@ def publish_feed():
     import shutil
     shutil.copy2(_RSS_OUTPUT, _PUBLISH_REPO / "feed.xml")
 
-    # Commit and push from publish repo
-    subprocess.run(["git", "add", "-A"], cwd=_PUBLISH_REPO, capture_output=True)
+    # Commit and push from publish repo.
+    # Feed-safety: NEVER `git add -A` here. The publish repo working tree is
+    # often dirty with unrelated in-flight audio from other episodes, and a
+    # blanket add would sweep those half-finished files into the feed commit.
+    # Stage ONLY the artifacts publish actually owns: the feed, episodes.json,
+    # and the produced episode audio/transcript/quality-report. Anything else
+    # modified in the tree is left for its own commit.
+    publish_paths = [
+        "feed.xml",
+        "rss/feed.xml",
+        "episodes.json",
+    ]
+    audio_dir = _PUBLISH_REPO / "audio"
+    if audio_dir.exists():
+        for pattern in ("*.podcast.mp3", "*.podcast.txt", "*.quality_report.json"):
+            publish_paths.extend(
+                str(p.relative_to(_PUBLISH_REPO))
+                for p in audio_dir.glob(pattern)
+            )
+    for rel in publish_paths:
+        if (_PUBLISH_REPO / rel).exists():
+            subprocess.run(["git", "add", "--", rel], cwd=_PUBLISH_REPO, capture_output=True)
     subprocess.run(
         ["git", "commit", "-m", "Update podcast feed"],
         cwd=_PUBLISH_REPO, capture_output=True,
@@ -3460,6 +3568,10 @@ def main():
             if do_summarize:
                 summary_path = summarize_video(item, video_title="")
                 if summary_path and args.podcast:
+                    if args.expect_topic and not check_expected_topic(
+                            summary_path, args.expect_topic):
+                        print("  Skipping podcast production (topic mismatch).")
+                        continue
                     vid_dur = _get_video_duration(item.get("video"))
                     produce_podcast(summary_path, video_title="",
                                     extra_prompt=args.prompt or "",
@@ -3505,11 +3617,15 @@ def main():
         if do_summarize:
             summary_path = summarize_video(result, video_title=args.title or "")
             if summary_path and args.podcast:
-                vid_dur = _get_video_duration(result.get("video"))
-                produce_podcast(summary_path, video_title=args.title or "",
-                                extra_prompt=args.prompt or "",
-                                video_duration_seconds=vid_dur,
-                                duo=args.duo, force=args.force)
+                if args.expect_topic and not check_expected_topic(
+                        summary_path, args.expect_topic):
+                    print("  Skipping podcast production (topic mismatch).")
+                else:
+                    vid_dur = _get_video_duration(result.get("video"))
+                    produce_podcast(summary_path, video_title=args.title or "",
+                                    extra_prompt=args.prompt or "",
+                                    video_duration_seconds=vid_dur,
+                                    duo=args.duo, force=args.force)
 
 
 if __name__ == "__main__":
