@@ -1,6 +1,7 @@
 # Podcast Production Backlog
 
 ## Published from this backlog
+- ep152 — (item #17) ep152-why-ubi-trap-youll-rent-everything-own-nothing
 - ep151 — (item #4) ep151-demis-hassabis-deepmind-alphafold-digital-biology
 - ep150 — (item #13) ep150-financial-physics-attention-motherfuckers-dig-that-wax-out
 - ep148 — Panama Real Estate: Is Panama City Entering a New Bull Market? (Fact Report)
@@ -112,7 +113,7 @@ Liberland episodes spaced with 4 non-Liberland between each.
 
 16. ~~🎥 **Why Ancient Humans Ate Rotten Meat on Purpose**~~ — ❌ DROPPED: off-theme curiosity, no real Señora Freedom angle
 
-17. 🏛️ **UBI: Who Wants It, Who It Serves — Dixon's Thesis Meets the Walmart Incentive**
+17. ~~🏛️ **UBI: Who Wants It, Who It Serves — Dixon's Thesis Meets the Walmart Incentive**~~ — ✅ PUBLISHED as **ep152** (ep152-why-ubi-trap-youll-rent-everything-own-nothing)
     - Category: Libertarian
     - Source: https://x.com/SenseReceptor/status/2066594287119384642?s=20 (Simon Dixon) + https://x.com/mikenevermiss/status/2066769708641042571/video/1 (Walmart)
     - Type: URL-based (merged — two complementary clips)
