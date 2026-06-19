@@ -1,6 +1,7 @@
 # Podcast Production Backlog
 
 ## Published from this backlog
+- ep150 — (item #13) ep150-financial-physics-attention-motherfuckers-dig-that-wax-out
 - ep148 — Panama Real Estate: Is Panama City Entering a New Bull Market? (Fact Report)
 - ep127 — Istanbul Real Estate: Renovation Costs and ROI for Turkish CBI
 - ep126 — Closing Claude Code's Feedback Loop — Self-Checking Before Handoff
@@ -87,7 +88,7 @@ Liberland episodes spaced with 4 non-Liberland between each.
 
 12. ~~🏛️ **Graham Hancock: The Lost Civilisation Mainstream Archaeology Won't Accept**~~ — ❌ DROPPED: off-brand fringe history + 2-hour source (heavy transcription) — save for a special or skip
 
-13. 💰 **Financial Physics Amplifies a "Common Sense" Finance Take**
+13. ~~💰 **Financial Physics Amplifies a "Common Sense" Finance Take**~~ — ✅ PUBLISHED as **ep150** (ep150-financial-physics-attention-motherfuckers-dig-that-wax-out)
    - Category: Finance
    - Source: https://x.com/FinancialPhys/status/2066254331913896196/video/1
    - Type: URL-based
