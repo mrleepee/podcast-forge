@@ -287,7 +287,10 @@ def generate_rss(episodes, base_url, feed_title, feed_description, feed_author,
 
 def main():
     parser = argparse.ArgumentParser(description="Generate podcast RSS feed from MP3 files")
-    parser.add_argument("--base-url", required=True,
+    # --base-url is NOT required at the argparse layer so that --snapshot-guids
+    # can run standalone (it returns before any feed generation). We enforce
+    # --base-url explicitly below on the normal generation path instead.
+    parser.add_argument("--base-url",
                         help="Base URL where MP3s will be hosted (e.g. https://user.github.io/repo/audio/)")
     parser.add_argument("--downloads", default=str(Path(__file__).resolve().parent.parent / "freeist-podcast" / "audio"),
                         help="Path to podcast audio directory")
@@ -325,6 +328,12 @@ def main():
         n = snapshot_guids_from_feed(args.snapshot_guids, args.metadata, suffix=args.suffix)
         print(f"Froze {n} existing GUID(s) into {args.metadata}")
         return
+
+    # Normal generation path requires --base-url (argparse can't enforce it
+    # because --snapshot-guids is allowed to omit it).
+    if not args.base_url:
+        parser.error("--base-url is required for feed generation "
+                     "(only --snapshot-guids may omit it)")
 
     metadata = load_episode_metadata(args.metadata)
     episodes = find_podcast_episodes(args.downloads, metadata=metadata,
