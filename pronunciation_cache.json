@@ -337,7 +337,9 @@
     "source": "manual",
     "word": "YAML"
   },
-  "rest": "rest (as in REST API)",
-  "x402": "x-four-oh-two",
-  "cbdc": "C-B-D-C (central bank digital currency)"
+  "gepa": {
+    "ipa": "\u02c8d\u0292i\u02d0p\u0259",
+    "source": "manual",
+    "word": "GEPA"
+  }
 }
