@@ -61,6 +61,11 @@ class TestRevisionReachesAudio:
                                            "threshold": 3, "passed": True})
         monkeypatch.setattr(v, "_polish_for_tts",
                             lambda text, language="en", duo=False: text)
+        # Neutralize the post-draft humanize step (an LLM transform, like
+        # _polish_for_tts) so the loop tests assert on the revision text itself,
+        # not on a humanizer rewrite.
+        monkeypatch.setattr(v, "humanize_script",
+                            lambda text, *, language="en": text)
         monkeypatch.setattr(co, "update_opening_log", lambda *a, **k: None)
 
         def fake_audio(text, out_path, lang="en"):
@@ -112,6 +117,8 @@ class TestQaLoopReturnsFinalText:
                             lambda *a, **k: REVISED_DRAFT)
         monkeypatch.setattr(v, "_polish_for_tts",
                             lambda text, language="en", duo=False: text)
+        monkeypatch.setattr(v, "humanize_script",
+                            lambda text, *, language="en": text)
 
         script_path = tmp_path / "ep1.podcast.txt"
         script_path.write_text(ORIGINAL_DRAFT, encoding="utf-8")

@@ -35,6 +35,9 @@ class TestOpeningTriggersRevision:
         monkeypatch.setattr(pipeline_stages, "draft_script",
                             lambda *a, **k: "Revised fresh hook here")
         monkeypatch.setattr(v, "_polish_for_tts", lambda t, language="en", duo=False: t)
+        # Neutralize the post-draft humanize step (LLM transform) so the test
+        # asserts on the re-drafted text, not a humanizer rewrite.
+        monkeypatch.setattr(v, "humanize_script", lambda t, *, language="en": t)
 
         script_path = tmp_path / "ep.podcast.txt"
         script_path.write_text("Original stale opening", encoding="utf-8")

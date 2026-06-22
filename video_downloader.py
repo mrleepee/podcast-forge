@@ -186,6 +186,18 @@ def parse_arguments():
             "(e.g. e214c8ebed)."
         ),
     )
+    parser.add_argument(
+        "--agentic-takeaway",
+        dest="agentic_takeaway",
+        choices=["auto", "on", "off"],
+        default="auto",
+        help=(
+            "Control the agentic-engineering callout clause appended to AI/LLM "
+            "episodes' narration prompt: 'auto' (default) fires iff the episode "
+            "is detected as AI/agent-engineering; 'on' always appends; 'off' "
+            "never appends. CLI wins over the AGENTIC_TAKEAWAY env."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -1269,11 +1281,15 @@ def _target_word_count(video_duration_seconds):
 
 
 def _narrate_as_podcast(summary_text, video_title="", extra_prompt="",
-                        target_words=700, language="en", duo=False):
+                        target_words=700, language="en", duo=False,
+                        agentic_takeaway="auto"):
     """Convert a bullet-point summary into a podcast-style narration via GLM.
 
     language: "en" for British English, "es" for beginner-friendly Spanish.
     duo: if True, generate two-speaker dialogue (Host/Co-host) instead of solo.
+    agentic_takeaway: "auto" (default) appends a one-concrete-callout clause iff
+        is_agentic_topic() detects an AI/engineering topic; "on" always appends;
+        "off" never appends. Only meaningful on the English path.
     """
     title_ctx = f' about "{video_title}"' if video_title else ""
 
@@ -1392,6 +1408,25 @@ def _narrate_as_podcast(summary_text, video_title="", extra_prompt="",
     if extra_prompt:
         prompt += f"\nAdditional instructions for this episode:\n{extra_prompt}\n"
 
+    # Agentic-engineering takeaway clause (AI/LLM episodes only). Resolution:
+    #   "on"  -> always append; "off" -> never; "auto" -> iff is_agentic_topic().
+    # Scoped to the English path; the Spanish track is off by default and the
+    # callout reads as English prose, so skip it there even when forced on.
+    _agentic_mode = (agentic_takeaway or "auto").lower()
+    if language == "en" and _agentic_mode in ("on", "auto"):
+        _fire = _agentic_mode == "on" or is_agentic_topic(summary_text, video_title)
+        if _fire:
+            prompt += (
+                "\nAGENTIC-ENGINEERING TAKEAWAY — because this episode is about "
+                "AI/agent technology, weave in ONE concrete, specific callout on "
+                "how a listener can apply a specific detail from this episode to "
+                "their own agentic-engineering practice (a harness pattern, a "
+                "prompting lesson, a tool, a failure mode). Name the actual thing "
+                "from this episode — not generic advice. Keep it to 1-2 "
+                "sentences, integrate it naturally; do not let it dominate or "
+                "feel bolted-on.\n"
+            )
+
     # Load SOUL.md for consistent persona across all episodes
     soul_file = Path(__file__).parent / "SOUL.md"
     if soul_file.exists():
@@ -1480,6 +1515,126 @@ def _polish_for_tts(narrative_text, language="en", duo=False):
         return narrative_text
 
 
+# Condensed humanizer rubric (seeded from ~/.claude/skills/humanizer/SKILL.md).
+# Single-pass rewrite: strip the most reliable AI-writing tells + the literal
+# "Here is a concise summary..." preamble that fires the similarity gate, while
+# preserving full meaning and the same paragraph coverage as the draft.
+_HUMANIZER_SYSTEM = (
+    "You are a writing editor that rewrites narration to sound human and spoken, "
+    "not AI-generated. Apply these rules as a single rewrite pass:\n\n"
+    "1. STRIP THE PREAMBLE. If the text opens with anything like 'Here is a "
+    "concise summary of the video transcript...' or 'Here is a summary "
+    "highlighting the key points...', DELETE that sentence entirely. Do not "
+    "paraphrase it into another meta-framing opener. Start with the actual "
+    "content.\n"
+    "2. NO EM DASHES (—) OR EN DASHES (–). Replace each with a period, comma, "
+    "colon, parentheses, or restructure the sentence. This is a hard constraint, "
+    "not a 'use sparingly' preference.\n"
+    "3. CUT RULE-OF-THREE LISTS that exist only to sound comprehensive. Keep "
+    "lists when the items are genuinely distinct and necessary.\n"
+    "4. STRIP AI VOCABULARY: delve, tapestry, testament, pivotal, underscores, "
+    "fostering, intricate, landscape (abstract), showcase, vibrant, enduring, "
+    "garner, interplay, valuable, enhance, actually, additionally, crucial, "
+    "align with, key (adjective). Replace with plain words or cut.\n"
+    "5. CUT SUPERFICIAL '-ing' ANALYSES: 'highlighting...', 'underscoring...', "
+    "'emphasizing...', 'ensuring...', 'reflecting...', 'symbolizing...', "
+    "'contributing to...', 'fostering...', 'showcasing...' tacked onto the end "
+    "of a sentence to add fake depth. Either make it a real clause or delete it.\n"
+    "6. CUT PROMOTIONAL PUFFERY: boasts a, vibrant, rich (figurative), profound, "
+    "enhancing its, showcasing, exemplifies, commitment to, nestled, in the "
+    "heart of, groundbreaking, renowned, breathtaking, stunning.\n"
+    "7. PRESERVE FULL MEANING. The rewrite must cover everything the original "
+    "covers. If the original has five paragraphs, the rewrite has five "
+    "paragraphs. Do not summarize away content, drop facts, or merge distinct "
+    "points into vagueness. Keep every specific number, name, and claim.\n"
+    "8. KEEP IT SPOKEN, NOT WRITTEN. This is podcast narration meant to be read "
+    "aloud. Vary sentence length — short punchy ones mixed with longer ones. "
+    "Prefer 'is/are/has' over 'serves as/stands as/boasts'. Use straight quotes, "
+    "not curly ones. No markdown, no bullet lists, no boldface, no headers.\n"
+    "9. RETURN ONLY THE REWRITTEN NARRATION. No preface, no 'Here is the', no "
+    "explanation of changes, no chatbot framing. Just the finished narration."
+)
+
+
+def humanize_script(text, *, language="en"):
+    """Rewrite drafted narration to strip AI-writing patterns (humanizer rubric).
+
+    Post-draft LLM pass: removes the literal 'Here is a concise summary...'
+    preamble (the main similarity-gate false-positive trigger) plus em-dashes,
+    rule-of-three, AI vocabulary, superficial -ing analyses, and promotional
+    puffery, while preserving full meaning, paragraph coverage, and the Señora
+    Freedom voice (SOUL.md persona is appended to the system prompt the same way
+    `_narrate_as_podcast` does it).
+
+    English-only for now; the Spanish track is off by default. Single pass
+    (cheaper than the skill's 2-pass audit/rewrite; upgrade if quality needs it).
+
+    On LLM failure, returns the input unchanged so the pipeline still ships.
+    """
+    if not text or not text.strip():
+        return text
+
+    system = _HUMANIZER_SYSTEM
+    # Append the SOUL.md persona so the rewrite keeps the voice (same load path
+    # as _narrate_as_podcast, video_downloader.py ~L1396).
+    soul_file = Path(__file__).parent / "SOUL.md"
+    if soul_file.exists():
+        soul_text = soul_file.read_text(encoding="utf-8")
+        system += f"\n\n--- PERSONA (preserve this voice) ---\n{soul_text}\n--- END PERSONA ---"
+
+    print("Humanizing narration (stripping AI-writing patterns)...")
+    try:
+        result = _call_llm(system, text, temperature=0.4, max_tokens=8192)
+        return result if result and result.strip() else text
+    except RuntimeError as e:
+        print(f"Humanize error (skipping step): {e}")
+        return text
+
+
+# --- Agentic-topic detection (precision-tuned) ---
+# Strong keywords: any one match fires (these are unambiguous AI/engineering
+# terms that won't appear in a Nomad/Finance/Libertarian episode by accident).
+# Moderate keywords: a single hit is ambiguous (e.g. 'model' could be a fashion
+# model, 'token' could be a casino token), so require >= 2 DISTINCT to fire.
+_AGENTIC_STRONG = (
+    r"\bagentic\b", r"\bagent[\s-]loop\b", r"\bagent[\s-]harness\b",
+    r"\bllm\b", r"\bllms\b", r"\bclaude code\b", r"\bprompt engineering\b",
+    r"\brag\b", r"\bretrieval[\s-]augmented\b", r"\bmcp\b",
+    r"\bmodel context protocol\b", r"\bfine[\s-]tun\w*", r"\bsystem prompt\b",
+    r"\bmulti[\s-]agent\b", r"\btool[\s-]use\b", r"\btool use\b",
+)
+_AGENTIC_MODERATE = (
+    r"\bagent\b", r"\bmodel\b", r"\binference\b", r"\btokens?\b",
+    r"\bembedding\b", r"\bvector database\b", r"\bworkflow\b",
+    r"\borchestration\b", r"\btransformer\b", r"\bgpt\b",
+)
+
+
+def is_agentic_topic(summary_text, video_title):
+    """Return True iff the content is about AI/agent/LLM engineering.
+
+    Precision-tuned so that a Nomad/Finance/Libertarian episode that merely
+    mentions 'AI' in passing does NOT fire, while a genuinely technical
+    AI/engineering episode does. Strong keywords fire on any single hit;
+    moderate keywords require >= 2 distinct hits. Case-insensitive,
+    word-boundary, across summary + title combined.
+    """
+    import re
+    haystack = f"{summary_text or ''}\n{video_title or ''}"
+    for pat in _AGENTIC_STRONG:
+        if re.search(pat, haystack, re.IGNORECASE):
+            return True
+    distinct = 0
+    seen = set()
+    for pat in _AGENTIC_MODERATE:
+        if re.search(pat, haystack, re.IGNORECASE):
+            seen.add(pat)
+            distinct = len(seen)
+            if distinct >= 2:
+                return True
+    return False
+
+
 _BRITISH_VOICES = [
     "bf_alice", "bf_emma", "bf_isabella", "bf_lily",
     "bm_daniel", "bm_fable", "bm_george", "bm_lewis",
@@ -1540,6 +1695,24 @@ _LAST_SEG_DIR = None         # set only under OMNIVOICE_KEEP_SEGS (seam QC hook)
 # silently. Set OMNIVOICE_REF_STRICT=0 only to override during an intentional
 # re-cut in progress.
 _OMNI_REF_STRICT = os.environ.get("OMNIVOICE_REF_STRICT", "1").lower() not in ("0", "false", "no")
+
+# Humanize step: a post-draft LLM pass that rewrites the English narration to
+# strip AI-writing patterns (the humanizer rubric) — most importantly the
+# literal "Here is a concise summary of the video transcript..." preamble that
+# triggers similarity-gate false-positives on nearly every episode. Default ON
+# so cron/batch renders pick it up automatically; set HUMANIZE_SCRIPT=0 to skip.
+# English-only for now — Spanish track is off by default (PRODUCE_SPANISH=0)
+# and the rubric is English-oriented; add a Spanish variant when that track is
+# re-enabled.
+_HUMANIZE_SCRIPT = os.environ.get("HUMANIZE_SCRIPT", "1").lower() not in ("0", "false", "no")
+
+# Agentic-engineering callout: auto-detect AI/LLM-technical episodes and append
+# a prompt clause asking the script to weave in one concrete, specific
+# agentic-engineering takeaway. "auto" = fire iff is_agentic_topic() detects one
+# (precision-tuned so Nomad/Finance/Libertarian episodes that merely mention
+# "AI" do NOT fire). Override via --agentic-takeaway {auto,on,off} (CLI wins) or
+# the AGENTIC_TAKEAWAY env (auto/on/off, default auto).
+_AGENTIC_TAKEAWAY_ENV = os.environ.get("AGENTIC_TAKEAWAY", "auto").lower()
 
 # Substrings marking a ref-clip warning as FATAL (misalignment / echo conditions).
 _FATAL_REF_MARKERS = (
@@ -2583,7 +2756,8 @@ class PipelineStageError(Exception):
 
 
 def _run_evidence_pipeline(summary_text, clean_name, podcast_path,
-                           video_title="", extra_prompt="", target_words=700, duo=False):
+                           video_title="", extra_prompt="", target_words=700, duo=False,
+                           agentic_takeaway="auto"):
     """Run the evidence-first pipeline: evidence → outline → script → QA → audio.
 
     Returns (en_txt_path, en_mp3_path) on success.
@@ -2642,10 +2816,17 @@ def _run_evidence_pipeline(summary_text, clean_name, podcast_path,
             outline, evidence, soul_text,
             video_title=video_title, extra_prompt=extra_prompt,
             target_words=target_words, duo=duo,
+            agentic_takeaway=agentic_takeaway,
         )
         if not en_narrative:
             raise PipelineStageError("script_draft",
                 "script generation returned empty", str(outline_path))
+        # Humanize the prose (strip AI patterns + the literal 'Here is a concise
+        # summary...' preamble) BEFORE _polish_for_tts normalizes pronunciation
+        # for TTS. Order is deliberate: humanize the wording, then TTS-polish
+        # the final wording.
+        if _HUMANIZE_SCRIPT:
+            en_narrative = humanize_script(en_narrative, language="en")
         en_narrative = _polish_for_tts(en_narrative, language="en", duo=duo)
         en_txt.write_text(en_narrative, encoding="utf-8")
         print(f"    Script saved: {en_txt.name}")
@@ -2656,7 +2837,8 @@ def _run_evidence_pipeline(summary_text, clean_name, podcast_path,
     print("  Stage 4: Content QA...")
     en_narrative = _run_qa_revision_loop(en_narrative, en_txt, outline, evidence,
                                          soul_text, video_title, extra_prompt,
-                                         target_words, duo, max_revisions=3)
+                                         target_words, duo, max_revisions=3,
+                                         agentic_takeaway=agentic_takeaway)
 
     # Stage 4b: Opening sentence freshness check
     try:
@@ -2801,7 +2983,7 @@ def _check_opening_freshness(script_text):
 
 def _run_qa_revision_loop(script_text, script_path, outline, evidence,
                           soul_text, video_title, extra_prompt, target_words, duo,
-                          max_revisions=3):
+                          max_revisions=3, agentic_takeaway="auto"):
     """Run content QA and revise script up to max_revisions times.
 
     Revision is triggered by a failing quality gate OR a stale opening (P4.2) —
@@ -2841,8 +3023,11 @@ def _run_qa_revision_loop(script_text, script_path, outline, evidence,
                 video_title=video_title,
                 extra_prompt=f"{extra_prompt}\n{qa_feedback}" if extra_prompt else qa_feedback,
                 target_words=target_words, duo=duo,
+                agentic_takeaway=agentic_takeaway,
             )
             if revised:
+                if _HUMANIZE_SCRIPT:
+                    revised = humanize_script(revised, language="en")
                 revised = _polish_for_tts(revised, language="en", duo=duo)
                 script_path.write_text(revised, encoding="utf-8")
                 script_text = revised
@@ -2989,11 +3174,15 @@ def check_expected_topic(summary_path, expected_topic):
 
 def produce_podcast(summary_path, video_title="", podcast_dir=None,
                     extra_prompt="", video_duration_seconds=0, duo=False,
-                    pipeline="summary", force=False):
+                    pipeline="summary", force=False, agentic_takeaway="auto"):
     """Full podcast pipeline: summary → narrate → TTS → MP3 (English + Spanish).
 
     pipeline: "summary" (default) or "evidence" for the evidence-first path.
     force:    bypass the fail-closed similarity/sponsorship gates (manual override).
+    agentic_takeaway: "auto" (default) appends the agentic-engineering callout
+        iff is_agentic_topic() detects an AI/LLM topic; "on" always appends;
+        "off" never. Falls back to the AGENTIC_TAKEAWAY env (default auto) when
+        callers leave the default.
     """
     if podcast_dir is None:
         podcast_dir = _AUDIO_DIR
@@ -3010,6 +3199,20 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
     print(f"  Source: {src_min:.1f}min → target: {target_words} words (~{target_words // 150}min podcast)")
 
     summary_text = summary_path.read_text(encoding="utf-8")
+
+    # Resolve agentic_takeaway: an explicit "on"/"off" wins; the "auto" default
+    # falls back to the AGENTIC_TAKEAWAY env so cron/batch renders can force it
+    # without a CLI flag. The actual fire decision for "auto" is made inside
+    # _narrate_as_podcast via is_agentic_topic(summary_text).
+    _agentic = (agentic_takeaway or "auto").lower()
+    if _agentic not in ("on", "off"):
+        _agentic = _AGENTIC_TAKEAWAY_ENV if _AGENTIC_TAKEAWAY_ENV in ("on", "off") else "auto"
+    agentic_takeaway = _agentic
+    if agentic_takeaway == "auto":
+        _detected = is_agentic_topic(summary_text, video_title)
+        print(f"  Agentic-engineering takeaway: auto ({'detected' if _detected else 'not detected'})")
+    else:
+        print(f"  Agentic-engineering takeaway: {agentic_takeaway}")
 
     # --- Sponsored content check ---
     result = _check_sponsored_content(summary_text, source_label=video_title)
@@ -3087,6 +3290,7 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
                 summary_text, clean_name, podcast_path,
                 video_title=video_title, extra_prompt=extra_prompt,
                 target_words=target_words, duo=duo,
+                agentic_takeaway=agentic_takeaway,
             )
         except PipelineStageError as e:
             print(f"\n  Pipeline failed at stage '{e.stage}': {e}")
@@ -3106,10 +3310,16 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
             else:
                 en_narrative = _narrate_as_podcast(
                     summary_text, video_title=video_title,
-                    extra_prompt=extra_prompt, target_words=target_words, language="en", duo=duo)
+                    extra_prompt=extra_prompt, target_words=target_words, language="en", duo=duo,
+                    agentic_takeaway=agentic_takeaway)
                 if not en_narrative:
                     print("Failed to generate English narration.")
                     return None
+                # Humanize the prose (strip AI patterns + the literal 'Here is a
+                # concise summary...' preamble) BEFORE _polish_for_tts normalizes
+                # pronunciation for TTS.
+                if _HUMANIZE_SCRIPT:
+                    en_narrative = humanize_script(en_narrative, language="en")
                 en_narrative = _polish_for_tts(en_narrative, language="en", duo=duo)
                 en_txt.write_text(en_narrative, encoding="utf-8")
                 print(f"  English narration saved: {en_txt.name}")
@@ -3494,6 +3704,18 @@ def summarize_video(result, video_title=""):
 def main():
     args = parse_arguments()
 
+    # Lower scheduling priority so renders (TTS, LLM calls, ffmpeg) don't hog
+    # the machine while the user works. PODCAST_NICE sets the increment added to
+    # the current nice value (macOS range 0-20; "10" = effectively lowest, the
+    # default). "0" disables. Guarded because os.nice can fail on some platforms
+    # / permission setups — a failure here must never block production.
+    try:
+        _nice_inc = int(os.environ.get("PODCAST_NICE", "10"))
+        if _nice_inc > 0:
+            os.nice(_nice_inc)
+    except (ValueError, OSError, PermissionError) as _e:
+        print(f"  (PODCAST_NICE skipped: {_e})")
+
     subtitle_langs = []
     if args.subs_lang:
         for entry in args.subs_lang:
@@ -3576,7 +3798,8 @@ def main():
                     produce_podcast(summary_path, video_title="",
                                     extra_prompt=args.prompt or "",
                                     video_duration_seconds=vid_dur,
-                                    duo=args.duo, force=args.force)
+                                    duo=args.duo, force=args.force,
+                                    agentic_takeaway=args.agentic_takeaway)
             print()
     else:
         url = args.url
@@ -3625,7 +3848,8 @@ def main():
                     produce_podcast(summary_path, video_title=args.title or "",
                                     extra_prompt=args.prompt or "",
                                     video_duration_seconds=vid_dur,
-                                    duo=args.duo, force=args.force)
+                                    duo=args.duo, force=args.force,
+                                    agentic_takeaway=args.agentic_takeaway)
 
 
 if __name__ == "__main__":
