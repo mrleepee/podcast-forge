@@ -1,6 +1,7 @@
 # Podcast Production Backlog
 
 ## Published from this backlog
+- ep158 — (item #7) ep158-david-ondrej-i-watched-100x-developer-use-codex
 - ep157 — (item #26) ep157-europes-accidental-collapse-cbdc-digital-id-fix
 - ep156 — (item #19) ep156-microsoft-skillopt-end-end-lifecycle-llm-skills
 - ep155 — (item #10) ep155-bayraktar-giant-monopolies-are-trying-control-ai
@@ -72,7 +73,7 @@ Liberland episodes spaced with 4 non-Liberland between each.
 
 6. ~~🤖 **Agentic Harness Engineering: The Paper That Proves Your Prompt Isn't Enough**~~ — ✅ ALREADY PUBLISHED as **ep141**
 
-7. 🤖 **100x Developer Uses Codex: The Workflow That Breaks Your Brain**
+7. ~~🤖 **100x Developer Uses Codex: The Workflow That Breaks Your Brain**~~ — ✅ PUBLISHED as **ep158** (ep158-david-ondrej-i-watched-100x-developer-use-codex)
    - Category: AI
    - Source: https://x.com/DavidOndrej1/status/2064754331715346658/video/1
    - Type: URL-based
