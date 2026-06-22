@@ -1,6 +1,7 @@
 # Podcast Production Backlog
 
 ## Published from this backlog
+- ep159 — (item #14) ep159-yarchi-anthropic-just-quietly-shipped-feature-that-lets
 - ep158 — (item #7) ep158-david-ondrej-i-watched-100x-developer-use-codex
 - ep157 — (item #26) ep157-europes-accidental-collapse-cbdc-digital-id-fix
 - ep156 — (item #19) ep156-microsoft-skillopt-end-end-lifecycle-llm-skills
@@ -103,7 +104,7 @@ Liberland episodes spaced with 4 non-Liberland between each.
    - Flags: default (~5 min)
    - Notes: @FinancialPhys (Financial Physics, a finance/markets account) quote-shares an ~8-min video by a creator he calls "this young lady," endorsing it as "this is common fucking sense… perfectly stated" — i.e. amplifying someone else's finance/economics argument as obvious truth. The specific claim lives in the shared video; the post itself is just the profane endorsement lead-in, so the actual topic must be read from the video before writing. **Fact-check before producing**: identify the original creator, extract the real argument from the video, and verify it — strip the "common sense / perfectly stated" endorsement framing for narration (don't parrot it). **Tone note**: clean up the profanity in the lead-in. Señora Freedom angle depends on the actual argument — likely a money/markets/institutional-critique theme; pin it down from the video first.
 
-14. 🤖 **Claude Code Agent Teams: One Lead, Many Specialists, One Pass**
+14. ~~🤖 **Claude Code Agent Teams: One Lead, Many Specialists, One Pass**~~ — ✅ PUBLISHED as **ep159** (ep159-yarchi-anthropic-just-quietly-shipped-feature-that-lets)
     - Category: AI
     - Source: https://x.com/undefinedKi/status/2066504594755031343?s=20
     - Type: URL-based
