@@ -1,6 +1,7 @@
 # Podcast Production Backlog
 
 ## Published from this backlog
+- ep160 — (item #15) ep160-ihtesham-ali-anthropic-just-got-caught-secretly-downgrading
 - ep159 — (item #14) ep159-yarchi-anthropic-just-quietly-shipped-feature-that-lets
 - ep158 — (item #7) ep158-david-ondrej-i-watched-100x-developer-use-codex
 - ep157 — (item #26) ep157-europes-accidental-collapse-cbdc-digital-id-fix
@@ -111,7 +112,7 @@ Liberland episodes spaced with 4 non-Liberland between each.
     - Flags: default (~5 min)
     - Notes: @undefinedKi (Yarchi, posted 2026-06-15, 231K views) announces Anthropic's **"agent teams"** — a Claude Code feature (needs v2.1.32+) where a team-lead agent spawns 3–5 specialist agents that share a task list and message each other as peers, reviewing each other's work. Demo: a QA agent caught three bugs, routed them back to the front-end and back-end dev agents, who fixed them — the app shipped in a single pass. How to run it: (1) enable it — add `"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"` under `env` in settings.json (or paste it to Claude and ask it to add it) and restart; (2) prompt in plain English — start with a goal (agents wake with zero context), then "create a team of 3 using Sonnet," describing each role, its deliverable, and who it messages when done; (3) the rules: each agent owns its own files, define exact outputs, name who talks to whom, keep it to 3–5 agents. Use it for complex work with separate parts running in parallel; skip it for simple/sequential tasks — teams cost ~3–4× the tokens. **Similarity note**: overlaps thematically with ep141 (Agentic Harness Engineering — multi-agent scaffolding), ep143 (Inside Claude Code — subagent delegation with worktree isolation) and ep111 (systems that prompt themselves); the distinct angle here is the specific productised feature and the peer-review ("agents that message and check each other's work") loop, so the similarity gate should pass it. Connects to ep143 (this is the subagent-delegation subsystem shipped as a product), ep141 (harness engineering — the team is the harness), ep115 (session management — each agent owns its own context/files). Señora Freedom angle: when the lead delegates to specialists that review each other's work, the shift is from a lone-genius prompt to an org-chart of agents — and whoever designs that org chart decides what ships.
 
-15. 🤖 **Anthropic "Silently Downgrading" Users: The Surveillance Behind Frontier AI**
+15. ~~🤖 **Anthropic "Silently Downgrading" Users: The Surveillance Behind Frontier AI**~~ — ✅ PUBLISHED as **ep160** (ep160-ihtesham-ali-anthropic-just-got-caught-secretly-downgrading)
     - Category: AI
     - Source: https://x.com/ihtesham2005/status/2066581709790097453?s=20
     - Type: URL-based
