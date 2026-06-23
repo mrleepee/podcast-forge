@@ -1646,7 +1646,7 @@ _SPANISH_VOICES = ["ef_dora", "em_alex", "em_santa"]
 # The worker runs under OmniVoice's own venv (heavy deps isolated from this one).
 _OMNIVOICE_PY = os.environ.get(
     "OMNIVOICE_PY",
-    str(Path.home() / "Dev" / "OmniVoice-Studio" / ".venv" / "bin" / "python"),
+    str(Path.home() / "Dev" / "vendor" / "OmniVoice-Studio" / ".venv" / "bin" / "python"),
 )
 _OMNIVOICE_WORKER = str(Path(__file__).resolve().parent / "tts_omnivoice.py")
 _OMNIVOICE_MODEL = os.environ.get("OMNIVOICE_MODEL", "k2-fsa/OmniVoice")
