@@ -16,7 +16,7 @@ os.environ.setdefault("TTS_ENGINE", "omnivoice")  # cloning default via voice_re
 import video_downloader as vd  # noqa: E402
 from checks.master_audio import master  # noqa: E402
 
-AUDIO = Path("/Users/lpollington/Dev/freeist-podcast/audio")
+AUDIO = Path("/Users/lpollington/Dev/personal/freeist-podcast/audio")
 
 
 def episode_scripts():

@@ -63,7 +63,7 @@ def text_to_audio(text, output_path, voice=VOICE):
 
 
 def main():
-    downloads = Path("/Users/lpollington/Dev/YouTubeDownloader/downloads/raw")
+    downloads = Path("/Users/lpollington/Dev/personal/YouTubeDownloader/downloads/raw")
     files = sorted(downloads.glob("*.summary.md"), key=lambda p: p.stat().st_mtime, reverse=True)[:5]
 
     print(f"Processing {len(files)} summaries...\n")
