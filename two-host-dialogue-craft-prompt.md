@@ -15,7 +15,7 @@ payoff. Every line either moves the conversation forward or earns its place by
 adding texture, attitude, or a laugh. If a line does neither, cut it.
 
 IMPORTANT — TARGET ENGINE: This dialogue is voiced by a flat-prosody TTS engine
-(e.g. Kokoro, Piper), NOT a human actor and NOT an expressive TTS model. The engine
+(e.g. Piper), NOT a human actor and NOT an expressive TTS model. The engine
 reads every line with roughly the same even, earnest contour. It cannot perform
 deadpan, sarcasm, comic timing, a dramatic pause, or a clipped retort. Any wit that
 depends on DELIVERY will fall flat and sound stilted or broken. Therefore: keep all

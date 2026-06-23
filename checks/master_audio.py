@@ -1,7 +1,7 @@
 """
 master_audio.py — Two-pass EBU R128 loudness normalisation for podcast audio.
 
-Takes a raw Kokoro MP3 (~-25 LUFS) and masters it to broadcast-standard
+Takes a raw TTS MP3 (~-25 LUFS) and masters it to broadcast-standard
 loudness: I=-16 LUFS, TP=-1.5 dBTP, LRA≤11.
 """
 from __future__ import annotations

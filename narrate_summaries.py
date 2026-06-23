@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert summary markdown files to narrative audio using GLM + Kokoro."""
+"""Convert summary markdown files to narrative audio using GLM + OmniVoice."""
 
 import os
 from pathlib import Path
@@ -19,13 +19,6 @@ def _load_dotenv():
 
 _load_dotenv()
 
-from kokoro import KPipeline
-import soundfile as sf
-
-
-VOICE = "bf_emma"
-SAMPLE_RATE = 24000
-
 
 def to_narrative(markdown_text):
     prompt = (
@@ -44,22 +37,10 @@ def to_narrative(markdown_text):
         return None
 
 
-def text_to_audio(text, output_path, voice=VOICE):
-    pipeline = KPipeline(lang_code="a")
-    segments = list(pipeline(text, voice=voice))
-    if not segments:
-        print(f"No audio generated for {output_path}")
-        return False
-
-    audio_chunks = []
-    for gs, ps, audio in segments:
-        audio_chunks.append(audio)
-    import numpy as np
-    full_audio = np.concatenate(audio_chunks)
-    sf.write(str(output_path), full_audio, SAMPLE_RATE)
-    duration = len(full_audio) / SAMPLE_RATE
-    print(f"  Audio: {duration:.1f}s saved to {output_path.name}")
-    return True
+def text_to_audio(text, output_path):
+    """Render narrative text to an MP3 via the OmniVoice engine (the sole engine)."""
+    from video_downloader import _generate_omnivoice_audio
+    return _generate_omnivoice_audio(text, str(output_path), lang="en", mode="solo")
 
 
 def main():
@@ -71,7 +52,7 @@ def main():
     for f in files:
         base = f.stem.replace(".summary", "")
         txt_path = f.parent / f"{base}.narrative.txt"
-        wav_path = f.parent / f"{base}.wav"
+        mp3_path = f.parent / f"{base}.narrative.mp3"
 
         print(f"[{base[:60]}]")
 
@@ -89,10 +70,10 @@ def main():
             txt_path.write_text(narrative, encoding="utf-8")
             print(f"  Saved: {txt_path.name}")
 
-        if wav_path.exists():
+        if mp3_path.exists():
             print(f"  Audio exists, skipping")
         else:
-            text_to_audio(narrative, wav_path)
+            text_to_audio(narrative, mp3_path)
 
         print()
 

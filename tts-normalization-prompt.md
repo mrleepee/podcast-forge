@@ -1,7 +1,7 @@
 # TTS Text Normalization Prompt
 
 A reusable instruction prompt for an LLM. It converts written text into a clean,
-spoken-ready script for text-to-speech engines (Kokoro, Piper, espeak-based, and
+spoken-ready script for text-to-speech engines (Piper, espeak-based, and
 similar). Paste everything below the line into the LLM as a system or instruction
 prompt, then provide the source text.
 
@@ -57,10 +57,10 @@ Letter → phonetic syllable reference (use these ONLY when spaced letters fail)
 - `SDK` → `S D K`
 
 Notes:
-- This project uses Kokoro TTS with a pronunciation golds database. Leave acronyms
-  and tech terms as single tokens (e.g. `AI` not `A I`) — the TTS pipeline has an
-  automatic post-processor that ensures correct pronunciation from a Wiktionary-backed
-  lexicon. Do NOT space the letters apart.
+- This project uses OmniVoice TTS with a curated pronunciation lexicon. Leave acronyms
+  and tech terms as single tokens (e.g. `AI` not `A I`) — the pipeline applies text
+  fixups from a risky-term lexicon so known terms are spoken correctly. Do NOT space
+  the letters apart.
 - Always confirm the article before the acronym still sounds right: "an AI agent"
   is correct (vowel sound); a consonant-starting spelling may need "a" instead of "an".
 
@@ -291,7 +291,7 @@ Resolve these from context the way a narrator would:
 
 ### 14. Flat-Prosody Structural Smoothing (dialogue / scripts)
 
-Basic engines (Kokoro, Piper, espeak-based) read with a flat, even contour. They
+Basic engines (Piper, espeak-based) read with a flat, even contour. They
 cannot perform a dramatic pause, deadpan, or a clipped retort. Punctuation that a
 human actor would interpret expressively instead produces an abrupt or broken
 delivery. When normalizing dialogue or scripts for these engines, smooth structure,
