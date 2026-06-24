@@ -198,6 +198,19 @@ def parse_arguments():
             "never appends. CLI wins over the AGENTIC_TAKEAWAY env."
         ),
     )
+    parser.add_argument(
+        "--series-continuity",
+        dest="series_continuity",
+        choices=["auto", "on", "off"],
+        default="auto",
+        help=(
+            "Control the series-continuity opening clause: 'auto' (default) "
+            "fires iff >=1 related prior episode is found above the series "
+            "threshold (~0.12); 'on' forces the query but still only emits a "
+            "clause when related episodes exist; 'off' never emits. CLI wins "
+            "over the SERIES_CONTINUITY env."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -1282,7 +1295,7 @@ def _target_word_count(video_duration_seconds):
 
 def _narrate_as_podcast(summary_text, video_title="", extra_prompt="",
                         target_words=700, language="en", duo=False,
-                        agentic_takeaway="auto"):
+                        agentic_takeaway="auto", series_context: str = ""):
     """Convert a bullet-point summary into a podcast-style narration via GLM.
 
     language: "en" for British English, "es" for beginner-friendly Spanish.
@@ -1426,6 +1439,13 @@ def _narrate_as_podcast(summary_text, video_title="", extra_prompt="",
                 "sentences, integrate it naturally; do not let it dominate or "
                 "feel bolted-on.\n"
             )
+
+    # Series-continuity opening clause (English path only — the callout is
+    # English prose and the Spanish track is off by default). A pre-built
+    # string passed in by produce_podcast after it ran the series similarity
+    # query; an empty string means nothing to cite, so nothing is appended.
+    if language == "en" and series_context:
+        prompt += series_context
 
     # Load SOUL.md for consistent persona across all episodes
     soul_file = Path(__file__).parent / "SOUL.md"
@@ -1713,6 +1733,15 @@ _HUMANIZE_SCRIPT = os.environ.get("HUMANIZE_SCRIPT", "1").lower() not in ("0", "
 # "AI" do NOT fire). Override via --agentic-takeaway {auto,on,off} (CLI wins) or
 # the AGENTIC_TAKEAWAY env (auto/on/off, default auto).
 _AGENTIC_TAKEAWAY_ENV = os.environ.get("AGENTIC_TAKEAWAY", "auto").lower()
+
+# Series continuity: when a new episode overlaps previously published work, the
+# narration opens by situating it in that thread ("in our continuing series on
+# X, we previously covered Y…"). Auto-fires iff >=1 related prior episode is
+# found above _SERIES_THRESHOLD — deliberately lower than the 0.20 duplicate
+# gate, so thematic threads surface even when the gate clears with zero matches.
+# Override via --series-continuity {auto,on,off} (CLI wins) or SERIES_CONTINUITY env.
+_SERIES_CONTINUITY_ENV = os.environ.get("SERIES_CONTINUITY", "auto").lower()
+_SERIES_THRESHOLD = 0.12
 
 # Substrings marking a ref-clip warning as FATAL (misalignment / echo conditions).
 _FATAL_REF_MARKERS = (
@@ -2462,11 +2491,16 @@ def _update_vector_index(slug, title, description):
     _VECTOR_SLUGS_PATH.write_text(json.dumps(slugs), encoding="utf-8")
 
 
-def _check_episode_similarity(summary_text, video_title):
+def _check_episode_similarity(summary_text, video_title, min_similarity=None):
     """Compare new episode summary against existing episodes.
 
     Returns list of top 5 matches above threshold, each with
     slug, title, similarity, and shared_terms.
+
+    min_similarity: optional cutoff override (defaults to _SIMILARITY_THRESHOLD
+        = 0.20, the duplicate-gate cutoff). The series-continuity feature passes
+        a lower value (e.g. 0.12) to gather related but non-duplicate prior
+        episodes for the opening "series" framing.
     """
     from sklearn.metrics.pairwise import cosine_similarity
     import numpy as np
@@ -2486,9 +2520,10 @@ def _check_episode_similarity(summary_text, video_title):
     top_indices = scores.argsort()[::-1][:10]
     episodes = json.loads(_EPISODES_JSON.read_text(encoding="utf-8"))
 
+    threshold = min_similarity if min_similarity is not None else _SIMILARITY_THRESHOLD
     for idx in top_indices:
         score = float(scores[idx])
-        if score < _SIMILARITY_THRESHOLD:
+        if score < threshold:
             break
         slug = slugs[idx]
         ep = episodes.get(slug, {})
@@ -2504,6 +2539,61 @@ def _check_episode_similarity(summary_text, video_title):
             break
 
     return matches
+
+
+def _build_series_clause(series_matches, max_refs=3):
+    """Build the SERIES CONTINUITY narration clause from related-episode matches.
+
+    Returns "" when there is nothing to cite. The returned string is English
+    prose appended to the narration prompt (English path only) asking the
+    script to OPEN by situating this episode in a thread with the prior work,
+    then frame this episode as the next step.
+
+    series_matches: list of {slug, title, similarity, shared_terms}, already
+        filtered to the series threshold and sorted by similarity desc (as
+        returned by _check_episode_similarity).
+    max_refs: cap on how many prior episodes to name.
+    """
+    if not series_matches:
+        return ""
+    refs = series_matches[:max_refs]
+    titles_block = "\n".join(
+        f"  - \"{m['title']}\" (slug: {m['slug']})"
+        for m in refs
+    )
+    # Seed the theme with shared terms across the matches, but let the LLM name
+    # it in natural prose (avoids brittle Python clustering).
+    seed_terms = []
+    for m in refs:
+        seed_terms.extend(m.get("shared_terms", []))
+    seen = set()
+    seed_terms = [t for t in seed_terms if not (t in seen or seen.add(t))][:4]
+    seed_str = (
+        f"Recurring terms across these (use only as a hint, rephrased in plain "
+        f"language): {', '.join(seed_terms)}.\n"
+        if seed_terms else ""
+    )
+    return (
+        "\nSERIES CONTINUITY — this episode is related to previously published "
+        "work. OPEN the narration by situating it in that thread, the way a "
+        "returning host would: name the shared theme in plain language, refer "
+        "to the prior episode(s), then frame THIS episode as the next step or "
+        "a new angle (e.g. \"In our continuing look at [theme], we previously "
+        "covered [prior episode]; today we take it one step further into "
+        "[this episode's specific angle]\"). Rules:\n"
+        "- Name at most the prior episodes listed below. Do NOT fabricate or "
+        "infer other episodes.\n"
+        "- Reference only episodes genuinely relevant to this one's topic; if "
+        "a listed title is a stretch, drop it rather than forcing the link.\n"
+        "- When naming a prior episode aloud, shorten or paraphrase its title "
+        "to how a person would say it — never read a long, clickbait-style "
+        "title verbatim.\n"
+        "- Keep the series framing to the OPENING only; do not repeat it.\n"
+        "- Infer the connecting theme yourself from the prior titles and this "
+        "episode's topic; state it as one short phrase.\n"
+        f"{seed_str}"
+        f"Previously published related episodes:\n{titles_block}\n"
+    )
 
 
 def _display_similarity_table(matches):
@@ -2757,7 +2847,7 @@ class PipelineStageError(Exception):
 
 def _run_evidence_pipeline(summary_text, clean_name, podcast_path,
                            video_title="", extra_prompt="", target_words=700, duo=False,
-                           agentic_takeaway="auto"):
+                           agentic_takeaway="auto", series_context: str = ""):
     """Run the evidence-first pipeline: evidence → outline → script → QA → audio.
 
     Returns (en_txt_path, en_mp3_path) on success.
@@ -2816,7 +2906,7 @@ def _run_evidence_pipeline(summary_text, clean_name, podcast_path,
             outline, evidence, soul_text,
             video_title=video_title, extra_prompt=extra_prompt,
             target_words=target_words, duo=duo,
-            agentic_takeaway=agentic_takeaway,
+            agentic_takeaway=agentic_takeaway, series_context=series_context,
         )
         if not en_narrative:
             raise PipelineStageError("script_draft",
@@ -2838,7 +2928,8 @@ def _run_evidence_pipeline(summary_text, clean_name, podcast_path,
     en_narrative = _run_qa_revision_loop(en_narrative, en_txt, outline, evidence,
                                          soul_text, video_title, extra_prompt,
                                          target_words, duo, max_revisions=3,
-                                         agentic_takeaway=agentic_takeaway)
+                                         agentic_takeaway=agentic_takeaway,
+                                         series_context=series_context)
 
     # Stage 4b: Opening sentence freshness check
     try:
@@ -2983,7 +3074,8 @@ def _check_opening_freshness(script_text):
 
 def _run_qa_revision_loop(script_text, script_path, outline, evidence,
                           soul_text, video_title, extra_prompt, target_words, duo,
-                          max_revisions=3, agentic_takeaway="auto"):
+                          max_revisions=3, agentic_takeaway="auto",
+                          series_context: str = ""):
     """Run content QA and revise script up to max_revisions times.
 
     Revision is triggered by a failing quality gate OR a stale opening (P4.2) —
@@ -3023,7 +3115,7 @@ def _run_qa_revision_loop(script_text, script_path, outline, evidence,
                 video_title=video_title,
                 extra_prompt=f"{extra_prompt}\n{qa_feedback}" if extra_prompt else qa_feedback,
                 target_words=target_words, duo=duo,
-                agentic_takeaway=agentic_takeaway,
+                agentic_takeaway=agentic_takeaway, series_context=series_context,
             )
             if revised:
                 if _HUMANIZE_SCRIPT:
@@ -3174,7 +3266,8 @@ def check_expected_topic(summary_path, expected_topic):
 
 def produce_podcast(summary_path, video_title="", podcast_dir=None,
                     extra_prompt="", video_duration_seconds=0, duo=False,
-                    pipeline="summary", force=False, agentic_takeaway="auto"):
+                    pipeline="summary", force=False, agentic_takeaway="auto",
+                    series_continuity="auto"):
     """Full podcast pipeline: summary → narrate → TTS → MP3 (English + Spanish).
 
     pipeline: "summary" (default) or "evidence" for the evidence-first path.
@@ -3277,6 +3370,34 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
             clean_name = f"ep{ep_num:02d}-{slug}"
             print(f"  Title clarified → {clean_name}")
 
+    # --- Series continuity ---
+    # Reuse the similarity machinery to find RELATED (not duplicate) prior
+    # episodes, then build a narration clause that opens by situating this
+    # episode in the thread. Runs AFTER the duplicate gate (a genuine duplicate
+    # is already blocked) and AFTER the title-clarity gate (uses the final
+    # title). The series query uses a LOWER threshold because most episodes
+    # clear the 0.20 gate with zero matches yet still belong to a thematic
+    # thread. sim_matches (from the gate, >=0.20) are the strongest relations;
+    # when empty, re-query at the lower series threshold to gather the thread.
+    _series_mode = (series_continuity or "auto").lower()
+    if _series_mode not in ("on", "off"):
+        _series_mode = _SERIES_CONTINUITY_ENV if _SERIES_CONTINUITY_ENV in ("on", "off") else "auto"
+    series_context = ""
+    if _series_mode != "off":
+        series_matches = sim_matches if sim_matches else _check_episode_similarity(
+            summary_text, video_title or "", min_similarity=_SERIES_THRESHOLD)
+        series_context = _build_series_clause(series_matches)
+        if series_context:
+            print(f"  Series continuity: {_series_mode} "
+                  f"({len(series_matches[:3])} related prior episode(s))")
+        elif _series_mode == "on":
+            print("  Series continuity: on, but no related prior episodes found "
+                  "(clause skipped — nothing to cite)")
+        else:
+            print("  Series continuity: auto (no related prior episodes)")
+    else:
+        print("  Series continuity: off")
+
     # Resolve the audio generator once, before the pipeline branch. The evidence
     # path never set it, so a non-bilingual Spanish narration later raised
     # NameError after the (expensive) English production had already run (P1.1).
@@ -3291,6 +3412,7 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
                 video_title=video_title, extra_prompt=extra_prompt,
                 target_words=target_words, duo=duo,
                 agentic_takeaway=agentic_takeaway,
+                series_context=series_context,
             )
         except PipelineStageError as e:
             print(f"\n  Pipeline failed at stage '{e.stage}': {e}")
@@ -3311,7 +3433,7 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
                 en_narrative = _narrate_as_podcast(
                     summary_text, video_title=video_title,
                     extra_prompt=extra_prompt, target_words=target_words, language="en", duo=duo,
-                    agentic_takeaway=agentic_takeaway)
+                    agentic_takeaway=agentic_takeaway, series_context=series_context)
                 if not en_narrative:
                     print("Failed to generate English narration.")
                     return None
@@ -3849,7 +3971,8 @@ def main():
                                     extra_prompt=args.prompt or "",
                                     video_duration_seconds=vid_dur,
                                     duo=args.duo, force=args.force,
-                                    agentic_takeaway=args.agentic_takeaway)
+                                    agentic_takeaway=args.agentic_takeaway,
+                                    series_continuity=args.series_continuity)
 
 
 if __name__ == "__main__":
