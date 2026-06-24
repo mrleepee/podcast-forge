@@ -439,7 +439,8 @@ def _build_opening_avoidance() -> str:
 def draft_script(outline: dict, evidence: list[dict], soul_text: str,
                  video_title: str = "", extra_prompt: str = "",
                  target_words: int = 700, duo: bool = False,
-                 agentic_takeaway: str = "auto") -> str:
+                 agentic_takeaway: str = "auto",
+                 series_context: str = "") -> str:
     """Draft a narration script from outline + evidence.
 
     Uses the existing _narrate_as_podcast infrastructure but with
@@ -486,6 +487,7 @@ def draft_script(outline: dict, evidence: list[dict], soul_text: str,
         language="en",
         duo=duo,
         agentic_takeaway=agentic_takeaway,
+        series_context=series_context,
     )
 
     return narrative or ""
