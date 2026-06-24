@@ -145,7 +145,7 @@ def parse_arguments():
     parser.add_argument(
         "--podcast",
         action="store_true",
-        help="Full podcast pipeline: summarize, convert to podcast narration, generate MP3 with Kokoro TTS.",
+        help="Full podcast pipeline: summarize, convert to podcast narration, generate MP3 with OmniVoice TTS.",
     )
     parser.add_argument(
         "--publish",
@@ -1655,14 +1655,7 @@ def is_agentic_topic(summary_text, video_title):
     return False
 
 
-_BRITISH_VOICES = [
-    "bf_alice", "bf_emma", "bf_isabella", "bf_lily",
-    "bm_daniel", "bm_fable", "bm_george", "bm_lewis",
-]
-
-_SPANISH_VOICES = ["ef_dora", "em_alex", "em_santa"]
-
-# --- OmniVoice TTS (default engine; set TTS_ENGINE=kokoro to fall back) ---
+# --- OmniVoice TTS (the sole engine) ---
 # The worker runs under OmniVoice's own venv (heavy deps isolated from this one).
 _OMNIVOICE_PY = os.environ.get(
     "OMNIVOICE_PY",
@@ -1805,11 +1798,6 @@ def _validate_ref_clip(path, ref_text, *, sr_expected=24000, min_trailing_ms=150
             Path(path).stem + "_clean" + Path(path).suffix))
         sf.write(clean_path, cleaned, sr)
     return warns, clean_path
-
-
-def _use_omnivoice() -> bool:
-    """OmniVoice is the default engine; TTS_ENGINE=kokoro selects the legacy path."""
-    return os.environ.get("TTS_ENGINE", "omnivoice").lower() != "kokoro"
 
 
 def _parse_dialogue(text):
@@ -1962,7 +1950,7 @@ def _omnivoice_render(segments, output_mp3_path, *, silence_sec=0.12):
 
     segments: list of {"text", "language" ("English"|"Spanish"), "instruct"?}.
     Loads the model once in the worker, concatenates the per-segment WAVs with a
-    short gap, then reuses the same libmp3lame encode as the Kokoro path. Returns bool.
+    short gap, then reuses the same libmp3lame encode as the OmniVoice pipeline. Returns bool.
     """
     import tempfile
     import soundfile as sf
@@ -2085,7 +2073,7 @@ def _omnivoice_render(segments, output_mp3_path, *, silence_sec=0.12):
 
 
 def _generate_omnivoice_audio(narrative_text, output_mp3_path, lang="en", mode="solo"):
-    """OmniVoice replacement for the Kokoro generators (solo/duo/bilingual)."""
+    """OmniVoice TTS generator (solo/duo/bilingual)."""
     lang_name = "Spanish" if lang == "es" else "English"
 
     if mode == "bilingual":
@@ -2132,262 +2120,17 @@ def _generate_omnivoice_audio(narrative_text, output_mp3_path, lang="en", mode="
 
 def _generate_duo_audio(narrative_text, output_mp3_path, lang="en"):
     """Generate two-speaker podcast audio with distinct voices per speaker."""
-    if _use_omnivoice():
-        return _generate_omnivoice_audio(narrative_text, output_mp3_path, lang=lang, mode="duo")
-
-    from kokoro import KPipeline
-    import soundfile as sf
-    import numpy as np
-    import random
-
-    segments = _parse_dialogue(narrative_text)
-    if len(segments) < 3:
-        print(f"  Duo: only {len(segments)} dialogue segments found — falling back to solo.")
-        return _generate_podcast_audio(narrative_text, output_mp3_path, lang=lang)
-
-    # Fix pronunciation: enrich cache + collapse spaced acronyms
-    if lang == "en":
-        narrative_text = _prepare_pronunciation(narrative_text)
-        # Re-parse after pronunciation fixes
-        segments = _parse_dialogue(narrative_text)
-
-    # Detect the two unique speakers (first-seen order)
-    seen = []
-    for speaker, _ in segments:
-        if speaker not in seen:
-            seen.append(speaker)
-    speaker_a, speaker_b = seen[0], seen[1] if len(seen) > 1 else seen[0]
-
-    SAMPLE_RATE = 24000
-    if lang == "es":
-        voice_a, voice_b = "ef_dora", "em_alex"
-        lang_code = "e"
-    else:
-        voice_a = random.choice(["bf_alice", "bf_emma", "bf_isabella", "bf_lily"])
-        voice_b = random.choice(["bm_daniel", "bm_fable"])
-        lang_code = "a"
-
-    print(f"  Duo mode: {len(segments)} segments, {speaker_a}={voice_a} / {speaker_b}={voice_b}")
-
-    pipeline = KPipeline(lang_code=lang_code, repo_id="hexgrad/Kokoro-82M")
-
-    # Load pronunciation golds into Kokoro's lexicon for correct g2p output
-    try:
-        from pronunciation_db import load_golds_into_pipeline
-        n = load_golds_into_pipeline(pipeline)
-        if n:
-            print(f"  Loaded {n} pronunciation golds into Kokoro lexicon")
-    except Exception as e:
-        print(f"  Warning: could not load pronunciation golds: {e}")
-
-    silence = np.zeros(int(0.15 * SAMPLE_RATE))
-
-    audio_parts = []
-    for speaker, text in segments:
-        voice = voice_a if speaker == speaker_a else voice_b
-        kokoro_segments = list(pipeline(text, voice=voice))
-        if kokoro_segments:
-            chunk = np.concatenate([audio for gs, ps, audio in kokoro_segments])
-            audio_parts.append(chunk)
-            audio_parts.append(silence)
-
-    if not audio_parts:
-        print("  No audio generated for duo mode.")
-        return False
-
-    full_audio = np.concatenate(audio_parts)
-    duration = len(full_audio) / SAMPLE_RATE
-    print(f"  Duo audio generated: {duration:.1f}s ({duration/60:.1f}min)")
-
-    wav_path = str(output_mp3_path).rsplit(".", 1)[0] + ".tmp.wav"
-    sf.write(wav_path, full_audio, SAMPLE_RATE)
-
-    cmd = [
-        "ffmpeg", "-y", "-i", wav_path,
-        "-codec:a", "libmp3lame", "-qscale:a", "2",
-    ]
-    if lang == "es":
-        cmd.extend(["-af", "atempo=0.85"])
-    cmd.append(str(output_mp3_path))
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    Path(wav_path).unlink(missing_ok=True)
-
-    if result.returncode != 0:
-        print(f"ffmpeg error: {result.stderr.strip()}")
-        return False
-
-    size_mb = Path(output_mp3_path).stat().st_size / (1024 * 1024)
-    print(f"  Duo MP3 saved: {output_mp3_path} ({size_mb:.1f}MB, {duration/60:.1f}min)")
-    return True
+    return _generate_omnivoice_audio(narrative_text, output_mp3_path, lang=lang, mode="duo")
 
 
 def _generate_bilingual_audio(narrative_text, output_mp3_path):
     """Generate bilingual podcast audio: ES lines in Spanish voice, EN lines in English voice."""
-    if _use_omnivoice():
-        return _generate_omnivoice_audio(narrative_text, output_mp3_path, mode="bilingual")
-
-    from kokoro import KPipeline
-    import soundfile as sf
-    import numpy as np
-
-    SAMPLE_RATE = 24000
-
-    # Parse ES:/EN: lines
-    segments = []
-    for line in narrative_text.strip().splitlines():
-        line = line.strip()
-        if line.startswith("ES:"):
-            segments.append(("ES", line[3:].strip()))
-        elif line.startswith("EN:"):
-            segments.append(("EN", line[3:].strip()))
-
-    if not segments:
-        print("  No ES:/EN: lines found in bilingual text.")
-        return False
-
-    print(f"  Bilingual mode: {len(segments)} segments "
-          f"({sum(1 for l,_ in segments if l=='ES')} ES, {sum(1 for l,_ in segments if l=='EN')} EN)")
-
-    # Create two pipelines — one per language
-    pipeline_es = KPipeline(lang_code="e", repo_id="hexgrad/Kokoro-82M")
-    pipeline_en = KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M")
-
-    # Load pronunciation golds into both
-    try:
-        from pronunciation_db import load_golds_into_pipeline
-        n_es = load_golds_into_pipeline(pipeline_es)
-        n_en = load_golds_into_pipeline(pipeline_en)
-        if n_es or n_en:
-            print(f"  Loaded {n_en} pronunciation golds into bilingual pipelines")
-    except Exception as e:
-        print(f"  Warning: could not load pronunciation golds: {e}")
-
-    voice_es = "ef_dora"
-    voice_en = "bm_fable"
-    silence = np.zeros(int(0.15 * SAMPLE_RATE))
-
-    wav_path = str(Path(output_mp3_path).with_suffix(".wav"))
-    audio_parts = []
-
-    for lang_tag, text in segments:
-        if not text:
-            continue
-        pipeline = pipeline_es if lang_tag == "ES" else pipeline_en
-        voice = voice_es if lang_tag == "ES" else voice_en
-        kokoro_segments = list(pipeline(text, voice=voice))
-        if kokoro_segments:
-            chunk = np.concatenate([audio for gs, ps, audio in kokoro_segments])
-            audio_parts.append(chunk)
-            audio_parts.append(silence)
-
-    if not audio_parts:
-        print("  No audio generated for bilingual segments.")
-        return False
-
-    combined = np.concatenate(audio_parts)
-    duration = len(combined) / SAMPLE_RATE
-    sf.write(wav_path, combined, SAMPLE_RATE)
-
-    cmd = [
-        "ffmpeg", "-y", "-i", wav_path,
-        "-codec:a", "libmp3lame", "-qscale:a", "2",
-        "-af", "atempo=0.9",
-        str(output_mp3_path),
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    Path(wav_path).unlink(missing_ok=True)
-    if result.returncode != 0:
-        print(f"ffmpeg error: {result.stderr.strip()}")
-        return False
-
-    size_mb = Path(output_mp3_path).stat().st_size / (1024 * 1024)
-    print(f"  Bilingual MP3 saved: {output_mp3_path} ({size_mb:.1f}MB, {duration/60:.1f}min)")
-    return True
-
-
-def _prepare_pronunciation(text: str):
-    """Enrich pronunciation cache from text and return postprocessed text.
-
-    1. Auto-lookup uncached words via Wiktionary
-    2. Collapse spaced acronyms (e.g. "A I" → "AI") so Kokoro golds match
-    """
-    try:
-        from pronunciation_db import enrich_pronunciation_cache, pronunciation_postprocess
-        new = enrich_pronunciation_cache(text)
-        if new:
-            print(f"  Enriched {new} new Wiktionary pronunciations")
-        text = pronunciation_postprocess(text)
-    except Exception as e:
-        print(f"  Warning: pronunciation pass failed: {e}")
-    return text
+    return _generate_omnivoice_audio(narrative_text, output_mp3_path, mode="bilingual")
 
 
 def _generate_podcast_audio(narrative_text, output_mp3_path, lang="en"):
-    """Generate podcast audio using Kokoro TTS and convert to MP3."""
-    if _use_omnivoice():
-        return _generate_omnivoice_audio(narrative_text, output_mp3_path, lang=lang, mode="solo")
-
-    from kokoro import KPipeline
-    import soundfile as sf
-    import numpy as np
-    import random
-
-    # Fix pronunciation before TTS: auto-lookup + collapse spaced acronyms
-    if lang == "en":
-        narrative_text = _prepare_pronunciation(narrative_text)
-
-    SAMPLE_RATE = 24000
-    if lang == "es":
-        voice = random.choice(_SPANISH_VOICES)
-        lang_code = "e"
-    else:
-        voice = random.choice(_BRITISH_VOICES)
-        lang_code = "a"
-
-    print(f"Generating audio ({len(narrative_text)} chars, voice: {voice}, lang: {lang})...")
-    pipeline = KPipeline(lang_code=lang_code, repo_id="hexgrad/Kokoro-82M")
-
-    # Load pronunciation golds into Kokoro's lexicon for correct g2p output
-    try:
-        from pronunciation_db import load_golds_into_pipeline
-        n = load_golds_into_pipeline(pipeline)
-        if n:
-            print(f"  Loaded {n} pronunciation golds into Kokoro lexicon")
-    except Exception as e:
-        print(f"  Warning: could not load pronunciation golds: {e}")
-
-    segments = list(pipeline(narrative_text, voice=voice, speed=0.9))
-    if not segments:
-        print("No audio generated.")
-        return False
-
-    audio_chunks = [audio for gs, ps, audio in segments]
-    full_audio = np.concatenate(audio_chunks)
-    duration = len(full_audio) / SAMPLE_RATE
-    print(f"  Audio generated: {duration:.1f}s ({duration/60:.1f}min, voice: {voice})")
-
-    wav_path = str(output_mp3_path).rsplit(".", 1)[0] + ".tmp.wav"
-    sf.write(wav_path, full_audio, SAMPLE_RATE)
-
-    cmd = [
-        "ffmpeg", "-y", "-i", wav_path,
-        "-codec:a", "libmp3lame", "-qscale:a", "2",
-    ]
-    if lang == "es":
-        cmd.extend(["-af", "atempo=0.85"])
-    else:
-        cmd.extend(["-af", "atempo=0.9"])
-    cmd.append(str(output_mp3_path))
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    Path(wav_path).unlink(missing_ok=True)
-
-    if result.returncode != 0:
-        print(f"ffmpeg error: {result.stderr.strip()}")
-        return False
-
-    size_mb = Path(output_mp3_path).stat().st_size / (1024 * 1024)
-    print(f"  MP3 saved: {output_mp3_path} ({size_mb:.1f}MB, {duration/60:.1f}min)")
-    return True
+    """Generate podcast audio using OmniVoice TTS."""
+    return _generate_omnivoice_audio(narrative_text, output_mp3_path, lang=lang, mode="solo")
 
 
 _PODCAST_REPO = Path(__file__).resolve().parent
@@ -3022,7 +2765,7 @@ def _run_evidence_pipeline(summary_text, clean_name, podcast_path,
         _gen_fn = _generate_duo_audio if duo else _generate_podcast_audio
         if not _gen_fn(en_narrative, en_mp3, lang="en"):
             raise PipelineStageError("audio_generation",
-                "Kokoro synthesis failed", str(en_txt))
+                "OmniVoice synthesis failed", str(en_txt))
 
     # Intro/outro and mastering are handled by the caller (produce_podcast)
     # to avoid double-splicing. Do NOT splice here.

@@ -2,7 +2,7 @@
 check_pronunciation — Detect risky tokens and verify pronunciation coverage.
 
 Risky tokens are acronyms, alphanumeric codes, and currency codes that
-Kokoro might mispronounce. Every detected token must have a pronunciation
+the TTS engine might mispronounce. Every detected token must have a pronunciation
 entry in the cache. The check passes when all risky tokens are covered.
 """
 from __future__ import annotations
