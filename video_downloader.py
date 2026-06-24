@@ -2736,6 +2736,75 @@ def _ensure_title_clarity(title, description, *, max_rounds=3):
     return title
 
 
+_DESCRIPTION_JUDGE_SYS = (
+    "You clean up a podcast episode's show-notes description so it reads as a "
+    "human-written blurb, not raw LLM output. You are given the CURRENT "
+    "DESCRIPTION (possibly empty, truncated mid-sentence, or carrying a "
+    "preamble), the episode TITLE, and SOURCE MATERIAL (a summary or narration "
+    "script). Return a clean description of at most ~3 sentences (~70 words). "
+    "Rules:\n"
+    "- DELETE any preamble such as 'Here is a concise summary of the "
+    "transcript…', '**Overall Summary:**', 'In this interview/video/clip…', or "
+    "any meta-commentary about how the episode was produced or summarised.\n"
+    "- If the CURRENT DESCRIPTION is empty or cuts off mid-sentence, write a "
+    "complete blurb grounded ONLY in the SOURCE MATERIAL.\n"
+    "- If the CURRENT DESCRIPTION is already clean and complete, return it "
+    "essentially unchanged (light wording polish only — do not rewrite for the "
+    "sake of it).\n"
+    "- No markdown, no bold, no headers, no emojis.\n"
+    "- Do NOT include or mention a 'Links:' section — it is handled separately.\n"
+    "Return ONLY the description text: no preamble, no labels, no quotes."
+)
+
+
+def _ensure_description_quality(desc, title, source_text):
+    """Return a clean, complete show-notes description.
+
+    Mirrors ``_ensure_title_clarity``'s graceful-degradation contract: strips
+    'Here is a concise summary…' / '**Overall Summary:**' preambles and
+    production meta-commentary; fills empty or mid-sentence-truncated blurbs
+    from ``source_text``; leaves already-clean descriptions essentially
+    unchanged. A trailing ``Links:`` block (and any leading ``#`` heading) is
+    split off before the LLM call and re-attached after, so URLs and curated
+    structure are never altered. On LLM failure, returns ``desc`` unchanged.
+    """
+    desc = (desc or "").strip()
+
+    # Preserve a trailing Links block — never let the judge rewrite URLs.
+    links_block = ""
+    body = desc
+    m = re.search(r"\nLinks\s*:\s*\n", desc, re.IGNORECASE)
+    if m:
+        links_block = desc[m.start():]
+        body = desc[:m.start()].rstrip()
+
+    # Preserve a leading markdown heading (some curated entries use '# Title').
+    heading = ""
+    hb = re.match(r"^(#{1,6}\s+.+?)\s*\n", body)
+    if hb:
+        heading = hb.group(1) + "\n"
+        body = body[hb.end():]
+    body = body.strip()
+
+    try:
+        cleaned = _call_llm(
+            _DESCRIPTION_JUDGE_SYS,
+            f"TITLE:\n{title or '(none)'}\n\nCURRENT DESCRIPTION:\n{body}\n\n"
+            f"SOURCE MATERIAL:\n{(source_text or '')[:1500]}",
+            temperature=0.3, max_tokens=220, hard_timeout=60, attempts=3)
+    except RuntimeError as e:
+        print(f"  Description-quality check unavailable ({e}); keeping current")
+        return desc
+    cleaned = (cleaned or "").strip().replace("**", "").strip()
+    if not cleaned:
+        return desc
+
+    out = (heading + cleaned).strip()
+    if links_block:
+        out = (out + "\n\n" + links_block.strip()).strip()
+    return out or desc
+
+
 def _next_episode_number(podcast_dir=None, episodes_json=None):
     """Find the next episode number from the union of the local audio dir and the
     published registry (episodes.json).
@@ -3513,8 +3582,14 @@ def produce_podcast(summary_path, video_title="", podcast_dir=None,
     # Register title/description/guid so the episode never ships under the
     # slug-derived fallback title (fix for ep142/ep143 shipping lufs-only).
     # setdefault preserves any curated value the publishing step already wrote.
+    # Run the auto-blurb through the description-quality judge so the registered
+    # blurb is never a truncated/cruft _episode_blurb excerpt even if the manual
+    # publish step is skipped or delayed (DESCRIPTION_QUALITY_CHECK=0 to disable).
+    _reg_blurb = _episode_blurb(summary_text)
+    if os.environ.get("DESCRIPTION_QUALITY_CHECK", "1") != "0":
+        _reg_blurb = _ensure_description_quality(_reg_blurb, video_title, summary_text)
     _register_episode_metadata(
-        clean_name, video_title, _episode_blurb(summary_text), f"freeist:{clean_name}")
+        clean_name, video_title, _reg_blurb, f"freeist:{clean_name}")
 
     # --- Quality gate ---
     _run_quality_gate(clean_name, en_txt, en_mp3, podcast_path)
