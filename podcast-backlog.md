@@ -1,6 +1,7 @@
 # Podcast Production Backlog
 
 ## Published from this backlog
+- ep166 — (item #31) ep166-building-ai-second-brain-claude-obsidian  *(research-based; also served as the series-continuity ear-test)*
 - ep165 — (item #20) ep165-sundar-pichai-orchestrate-ai-agents-now-or-spend  *(reframed — source clip was Pichai on agent orchestration, not the note's computer-use guess)*
 - ep164 — (item #32) ep164-disowned-signing-william-hooper-cost-declaration
 - ep163 — (item #30) ep163-chinas-micro-margin-machine-winning-pennies-per-unit
@@ -253,7 +254,7 @@ Liberland episodes spaced with 4 non-Liberland between each.
    - **Duplicate-risk**: low-moderate — the show's Finance items (#21 debt spiral, #22 Bitcoin, ep107 taxation) are macro/hard-money, distinct from a manufacturing-supply-chain-economics piece. Run `_check_episode_similarity`; proceed unless a genuine near-dup.
    - Connects to the show's economics/sovereignty thread (ep107 taxation, trade/tariff subtext) and the cross-border-business angle (ep104 Uganda, ep127 Istanbul). **Alternation note**: Finance after two AI (#28, #29) — good, breaks the run. Señora Freedom angle: the micro-margin machine is the starkest illustration that "cheap labor" is a lazy Western explanation and the real story is systemic optimization at scale — the sovereignty angle is that this manufacturing base is a strategic dependency (the West outsourced the physical means of production for margin convenience), and understanding the economics is the first step to deciding whether that dependency is a feature or a vulnerability.
 
-31. 🤖 **Building an AI "Second Brain" With Claude + Obsidian (Yarchi's Full Guide)**
+31. ~~🤖 **Building an AI "Second Brain" With Claude + Obsidian (Yarchi's Full Guide)**~~ — ✅ PUBLISHED as **ep166** (ep166-building-ai-second-brain-claude-obsidian) on 2026-06-25. *(Ear-test for the series-continuity feature — opening referenced the Obsidian-vault + AI-agent-memory priors.)*
    - Category: AI (personal knowledge management / PKM)
    - Source: https://x.com/undefinedKi/status/2068306794116501544  (Yarchi / @undefinedKi — links an article; follow the article link for the full guide)
    - Type: URL-based (X post → article) + RESEARCH-AUGMENTED — read the actual article for the method
